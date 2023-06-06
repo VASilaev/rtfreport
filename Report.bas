@@ -81,7 +81,7 @@ End Sub
 Public Sub PrintReport(vReport, ByRef dic As Variant, Optional sFile As String = "")
 
  Dim fso
- Dim tf As TextStream
+ Dim tf 'As TextStream
  Dim asTemplate, tValue, i As Integer
  Dim sPathOrig As String, sExtension As String
 
@@ -123,7 +123,7 @@ Public Sub PrintReport(vReport, ByRef dic As Variant, Optional sFile As String =
  If sFile = "" Then
    On Error Resume Next
    For i = 0 To 1000
-    sFile = fso.GetSpecialFolder(TemporaryFolder) & "\tmp_" & i & "." & asTemplate(0)
+    sFile = fso.GetSpecialFolder(2) & "\tmp_" & i & "." & asTemplate(0)
     If fso.FileExists(sFile) Then
      fso.DeleteFile sFile, True
      If Not fso.FileExists(sFile) Then Exit For
@@ -601,7 +601,7 @@ Public Function PrepareRTF(sFile As String) As String
 ' tf.Write ts
 ' tf.Close
  
- re.Multiline = True
+ re.MultiLine = True
  re.IgnoreCase = True
  re.Global = False
  re.Pattern = "^\s*[_0-9а-яa-zё]+\s*\(.*\)$"
@@ -1042,7 +1042,7 @@ Else
     Set objRegExp = CreateObject("VBScript.RegExp")
     objRegExp.Global = False
     objRegExp.IgnoreCase = True
-    objRegExp.Multiline = False
+    objRegExp.MultiLine = False
     'Фильтр по умолчанию настроен на картинки
     If aArg(1) <> "" Then objRegExp.Pattern = aArg(1) Else objRegExp.Pattern = ".+\.(jpg|jpeg|png|emf)$"
     
@@ -1217,7 +1217,7 @@ End Function
 
 Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic As Variant) As String
  Dim fso
- Dim tFile As TextStream
+ Dim tFile 'As TextStream
  'Dim ts As String
  Dim PC As Long, iCnt As Long, iCnt2 As Long
  Dim dic
@@ -1260,7 +1260,19 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
     PC = PC + iCnt + 12
    Case "PRVL"
     iCnt = CInt("&h" & Mid(ts, PC + 4, 3))
-    sValue = NVL(GetValue(Mid(ts, PC + 7, iCnt), dic, 1), "")
+    
+    sValue = Mid(ts, PC + 7, iCnt)
+    
+    On Error Resume Next
+    sValue = Application.Eval(sValue)
+    If Err Then
+      On Error GoTo 0
+      sValue = GetValue(sValue, dic, 1)
+    Else
+      On Error GoTo 0
+    End If
+   
+    sValue = NVL(sValue, "")
     If sfncConvert <> "" Then sValue = Application.Run(sfncConvert, sValue)
     If Not OutStream Is Nothing Then OutStream.Write sValue Else MakeReport = MakeReport & sValue
     PC = PC + iCnt + 7
@@ -1876,4 +1888,3 @@ Public Function SelectFirstColumn(sql As String) As Variant()
  Set rsdao = Nothing
  SelectFirstColumn = avResult
 End Function
-
