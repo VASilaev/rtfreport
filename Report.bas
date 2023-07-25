@@ -1,4 +1,4 @@
-﻿Attribute VB_Name = "Report"
+Attribute VB_Name = "Report"
  Option Compare Text
  Option Explicit
   
@@ -158,6 +158,301 @@ Public Sub PrintReport(vReport, ByRef dic As Variant, Optional sFile As String =
  
 End Sub
 
+Function isNumber(s)
+  Dim i
+  isNumber = True
+  For i = 1 To Len(s)
+    If Mid(s, i, 1) < "0" Or Mid(s, i, 1) > "9" Then
+      isNumber = False
+      Exit Function
+    End If
+  Next
+End Function
+
+Function code128(SourceString, return_type)
+'#param SourceString - Кодируемый текст
+'#param return_type - Тип возвращаемого результата
+' {*} 0 - Кодирует для вывода специальным шрифтом
+' {*} 1 - Формат для чтения человеком
+' {*} 2 - возвращает контрольню сумму
+' {*} 3 - Возвращает в виде последовательности палочек и пробелов
+
+
+  Dim i, dataToFormat, n, currentEncoding, weightedTotal, checkDigitValue, stringlen, currentValue, dataToPrint
+  
+ i = 1
+ dataToFormat = Trim(SourceString)
+ stringlen = Len(dataToFormat)
+
+
+ If return_type = 1 Then
+   'Просто форматируем в переданное значение
+   i = 1
+   code128 = ""
+   For i = 1 To stringlen
+     n = Asc(Mid(dataToFormat, i, 1))
+     If i < Len(dataToFormat) - 2 And n = 202 Then
+       n = CLng(Mid(dataToFormat, i + 1, 2))
+       If ((i < Len(dataToFormat) - 4) And ((n >= 80 And n <= 81) Or (n >= 31 And n <= 34))) Then
+         code128 = code128 & " (" & Mid(dataToFormat, i + 1, 4) & ") "
+         i = i + 4
+       ElseIf ((i < Len(dataToFormat) - 3) And ((n >= 40 And n <= 49) Or (n >= 23 And n <= 25))) Then
+         code128 = code128 & " (" & Mid(dataToFormat, i + 1, 3) & ") "
+         i = i + 3
+       ElseIf ((i < Len(dataToFormat) - 2) And ((n >= 0 And n <= 30) Or (n >= 90 And n <= 99))) Then
+         code128 = code128 & " (" & Mid(dataToFormat, i + 1, 2) & ") "
+         i = i + 2
+       End If
+     ElseIf Asc(Mid(dataToFormat, i, 1)) < 32 Then
+       code128 = code128 & " "
+     ElseIf Asc(Mid(dataToFormat, i, 1)) > 31 And Asc(Mid(dataToFormat, i, 1)) < 128 Then
+       code128 = code128 & Mid(dataToFormat, i, 1)
+     End If
+     i = i + 1
+   Next
+ Else
+   n = Asc(Mid(dataToFormat, 1, 1))
+   If n < 32 Then
+     code128 = Chr(203) 'A
+     currentEncoding = "A"
+   ElseIf (Len(dataToFormat) > 4 And isNumber(Mid(dataToFormat, 1, 4))) Or n = 202 Then
+     code128 = Chr(205) 'C
+     currentEncoding = "C"
+   ElseIf n >= 32 And n < 127 Then
+     code128 = Chr(204) 'B
+     currentEncoding = "B"
+   Else
+     
+   End If
+     
+   
+   Do While i <= stringlen
+     If Mid(dataToFormat, i, 1) = Chr(202) Then
+       code128 = code128 & Chr(202)
+        
+     ElseIf ((i < stringlen - 2) And isNumber(Mid(dataToFormat, i, 4))) Or ((i < stringlen) And isNumber(Mid(dataToFormat, i, 2)) And (currentEncoding = "C")) Then
+   
+       If currentEncoding <> "C" Then code128 = code128 & Chr(199)
+       currentEncoding = "C"
+       currentValue = CLng(Mid(dataToFormat, i, 2))
+   
+       If currentValue < 95 Then code128 = code128 & Chr(currentValue + 32) Else code128 = code128 & Chr(currentValue + 100)
+       i = i + 1
+   
+     ElseIf ((Asc(Mid(dataToFormat, i, 1)) < 31) Or ((currentEncoding = "A") And (Asc(Mid(dataToFormat, i, 1)) > 32 And (Asc(Mid(dataToFormat, i, 1))) < 96))) Then
+   
+       If currentEncoding <> "A" Then code128 = code128 & Chr(201)
+       currentEncoding = "A"
+       n = Asc(Mid(dataToFormat, i, 1))
+       If n = 32 Then code128 = code128 & Chr(194) Else If n < 32 Then code128 = code128 & Chr(n + 96) Else code128 = code128 & Chr(n)
+   
+     ElseIf ((Asc(Mid(dataToFormat, i, 1))) > 31 And (Asc(Mid(dataToFormat, i, 1))) < 127) Then
+   
+       If currentEncoding <> "B" Then code128 = code128 & Chr(200)
+       currentEncoding = "B"
+       n = Asc(Mid(dataToFormat, i, 1))
+       If n = 32 Then code128 = code128 & Chr(194) Else code128 = code128 & Chr(n)
+     End If
+     i = i + 1
+   Loop
+   
+   checkDigitValue = Asc(Mid(code128, 1, 1)) - 100
+   For i = 2 To Len(code128)
+     n = Asc(Mid(code128, i, 1))
+     If n = 194 Then currentValue = 0 Else If n < 135 Then currentValue = n - 32 Else currentValue = n - 100
+     checkDigitValue = checkDigitValue + currentValue * (i - 1)
+   Next
+   
+   checkDigitValue = checkDigitValue Mod 103
+   
+   If checkDigitValue >= 95 Then checkDigitValue = Chr(checkDigitValue + 100) Else If checkDigitValue = 0 Then checkDigitValue = Chr(194) Else checkDigitValue = Chr(checkDigitValue + 32)
+   
+   If return_type = 0 Or return_type = 3 Then
+     code128 = code128 & checkDigitValue & Chr(206) 'End
+     
+     If return_type = 3 Then
+       dataToPrint = code128
+       code128 = ""
+       Dim zebraArr: zebraArr = Array("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "|| ||  ||  ", _
+                                      "||  || ||  ", "||  ||  || ", "|  |  ||   ", "|  |   ||  ", "|   |  ||  ", "|  ||  |   ", "|  ||   |  ", "|   ||  |  ", _
+                                      "||  |  |   ", "||  |   |  ", "||   |  |  ", "| ||  |||  ", "|  || |||  ", "|  ||  ||| ", "| |||  ||  ", "|  ||| ||  ", _
+                                      "|  |||  || ", "||  |||  | ", "||  | |||  ", "||  |  ||| ", "|| |||  |  ", "||  ||| |  ", "||| || ||| ", "||| |  ||  ", _
+                                      "|||  | ||  ", "|||  |  || ", "||| ||  |  ", "|||  || |  ", "|||  ||  | ", "|| || ||   ", "|| ||   || ", "||   || || ", _
+                                      "| |   ||   ", "|   | ||   ", "|   |   || ", "| ||   |   ", "|   || |   ", "|   ||   | ", "|| |   |   ", "||   | |   ", _
+                                      "||   |   | ", "| || |||   ", "| ||   ||| ", "|   || ||| ", "| ||| ||   ", "| |||   || ", "|   ||| || ", "||| ||| || ", _
+                                      "|| |   ||| ", "||   | ||| ", "|| ||| |   ", "|| |||   | ", "|| ||| ||| ", "||| | ||   ", "||| |   || ", "|||   | || ", _
+                                      "||| || |   ", "||| ||   | ", "|||   || | ", "||| |||| | ", "||  |    | ", "||||   | | ", "| |  ||    ", "| |    ||  ", _
+                                      "|  | ||    ", "|  |    || ", "|    | ||  ", "|    |  || ", "| ||  |    ", "| ||    |  ", "|  || |    ", "|  ||    | ", _
+                                      "|    || |  ", "|    ||  | ", "||    |  | ", "||  | |    ", "|||| ||| | ", "||    | |  ", "|   |||| | ", "| |  ||||  ", _
+                                      "|  | ||||  ", "|  |  |||| ", "| ||||  |  ", "|  |||| |  ", "|  ||||  | ", "|||| |  |  ", "||||  | |  ", "||||  |  | ", _
+                                      "|| || |||| ", "|| |||| || ", "|||| || || ", "| | ||||   ", "| |   |||| ", "|   | |||| ", "", "", "", "", "", "", "", "", "", _
+                                      "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", _
+                                      "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "|| ||  ||  ", "| |||| |   ", "| ||||   | ", _
+                                      "|||| | |   ", "|||| |   | ", "| ||| |||| ", "| |||| ||| ", "||| | |||| ", "|||| | ||| ", "|| |    |  ", "|| |  |    ", _
+                                      "|| |  |||  ", "||   ||| | ||", "|| ||  ||  ")
+       For i = 1 To Len(dataToPrint)
+         code128 = code128 & zebraArr(Asc(Mid(dataToPrint, i, 1)))
+       Next
+     End If
+   ElseIf return_type = 2 Then
+     code128 = checkDigitValue
+   End If
+ End If
+End Function
+
+Sub addInArray(ByRef spArray, ByRef pItem)
+  If Not IsArray(spArray) Then spArray = Array()
+  ReDim Preserve spArray(UBound(spArray) + 1)
+  spArray(UBound(spArray)) = pItem
+End Sub
+
+Function longToByte(l)
+  Dim tl: tl = l
+  longToByte = Chr(tl Mod 256)
+  tl = tl \ 256
+  longToByte = longToByte & Chr(tl Mod 256)
+  tl = tl \ 256
+  longToByte = longToByte & Chr(tl Mod 256)
+  tl = tl \ 256
+  longToByte = longToByte & Chr(tl Mod 256)
+End Function
+
+Function intToByte(i)
+  Dim ti: ti = i
+  intToByte = Chr(ti Mod 256)
+  ti = ti \ 256
+  intToByte = intToByte & Chr(ti Mod 256)
+End Function
+
+Function block(fnc, data)
+  block = intToByte(fnc) & data
+  block = longToByte((Len(block) \ 2) + 2) & block
+End Function
+
+Function Point(x, y)
+  Point = intToByte(x) & intToByte(y)
+End Function
+
+Function color(r, g, b)
+  color = Chr(0) & Chr(b Mod 256) & Chr(g Mod 256) & Chr(r Mod 256)
+End Function
+
+Function rectaspoligon(ByRef objCount, l, t, r, b)
+  objCount = objCount + 1
+  rectaspoligon = block(&H324, intToByte(4) & Point(l, b) & Point(l, t) & Point(r, t) & Point(r, b))
+End Function
+
+Function CreatePenIndirect(ByRef objCount, PenStyle, pPoint, pColor)
+  objCount = objCount + 1
+  CreatePenIndirect = block(&H2FA, intToByte(PenStyle) & pPoint & pColor)
+End Function
+
+Function SelectObject(nObject)
+  SelectObject = block(&H12D, intToByte(nObject))
+End Function
+
+Function CreateBrushIndirect(objCount, style, color, hatch)
+  objCount = objCount + 1
+  CreateBrushIndirect = block(&H2FC, intToByte(style) & color & intToByte(hatch))
+End Function
+
+Function EAN13CheckNumber(Code)
+  Dim sCode, i
+  sCode = Code & ""
+  EAN13CheckNumber = 0
+  For i = 0 To Len(sCode) - 1
+    If i Mod 2 = 0 Then EAN13CheckNumber = EAN13CheckNumber + CInt(Mid(sCode, Len(sCode) - i, 1)) * 3 Else EAN13CheckNumber = EAN13CheckNumber + CInt(Mid(sCode, Len(sCode) - i, 1))
+  Next
+  EAN13CheckNumber = 10 - EAN13CheckNumber Mod 10
+End Function
+
+
+
+Function EAN13(Code, addCheckSum)
+  Dim sCode, zebra, codeSchema, i
+  sCode = Code & ""
+  If addCheckSum Then Code = Code & EAN13CheckNumber(sCode)
+
+  sCode = Right("0000000000000" & Code, 13)
+
+  zebra = Array(Array("   || |", "|||  | ", " |  |||"), _
+                Array("  ||  |", "||  || ", " ||  ||"), _
+                Array("  |  ||", "|| ||  ", "  || ||"), _
+                Array(" |||| |", "|    | ", " |    |"), _
+                Array(" |   ||", "| |||  ", "  ||| |"), _
+                Array(" ||   |", "|  ||| ", " |||  |"), _
+                Array(" | ||||", "| |    ", "    | |"), _
+                Array(" ||| ||", "|   |  ", "  |   |"), _
+                Array(" || |||", "|  |   ", "   |  |"), _
+                Array("   | ||", "||| |  ", "  | |||"))
+                
+  
+  codeSchema = Array(Array(0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 0, 2, 0, 2, 2, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 0, 2, 2, 0, 2, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 0, 2, 2, 2, 0, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 2, 0, 0, 2, 2, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 2, 2, 0, 0, 2, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 2, 2, 2, 0, 0, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 2, 0, 2, 0, 2, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 2, 0, 2, 2, 0, 1, 1, 1, 1, 1, 1), _
+                     Array(0, 2, 2, 0, 2, 0, 1, 1, 1, 1, 1, 1))(CInt(Mid(sCode, 1, 1)))
+  
+  EAN13 = ".        L L"
+  
+  For i = 2 To 13
+    EAN13 = EAN13 & zebra(CInt(Mid(sCode, i, 1)))(codeSchema(i - 2))
+    If i = 7 Then EAN13 = EAN13 & " L L "
+  Next
+  
+  EAN13 = EAN13 & "L L        ."
+End Function
+
+
+Function zebra2wmf(s, xFactor, yFactor, ByRef MaxWidth)
+  Dim recs, objCount, i, l, largest, size
+  recs = Empty
+  objCount = 0
+  addInArray recs, CreatePenIndirect(objCount, 0, Point(0, 0), color(255, 0, 0))
+  addInArray recs, SelectObject(objCount - 1)
+  addInArray recs, CreateBrushIndirect(objCount, 0, color(0, 0, 0), 4)
+  addInArray recs, SelectObject(objCount - 1)
+  i = 1
+  Do While i <= Len(s)
+    l = 1
+    Do While True
+      If i + l > Len(s) Then Exit Do
+      If Mid(s, i, 1) <> Mid(s, i + l, 1) Then Exit Do
+      l = l + 1
+    Loop
+    If Mid(s, i, 1) = "|" Then
+      addInArray recs, rectaspoligon(objCount, i * xFactor, 0, (i + l) * xFactor - 1, yFactor)
+    ElseIf Mid(s, i, 1) = "." Then
+      addInArray recs, rectaspoligon(objCount, i * xFactor, yFactor, i * xFactor, yFactor)
+    ElseIf Mid(s, i, 1) = "L" Then
+      addInArray recs, rectaspoligon(objCount, i * xFactor, 0, (i + l) * xFactor - 1, yFactor * 1.2)
+    End If
+    MaxWidth = (i + l) * xFactor
+    i = i + l
+  Loop
+  addInArray recs, block(0, Empty) 'EOF
+  zebra2wmf = Join(recs, "")
+  largest = 0
+  For Each i In recs
+    If Len(i) / 2 > largest Then largest = Len(i) / 2
+  Next
+  size = Len(zebra2wmf) / 2 + 9
+  zebra2wmf = intToByte(1) & _
+     intToByte(9) & _
+     intToByte(&H100) & _
+     intToByte(size Mod &H10000) & _
+     intToByte(size \ &H10000) & _
+     intToByte(UBound(recs)) & _
+     longToByte(largest) & _
+     intToByte(0) & zebra2wmf
+End Function
+
+
 Function GetFilter(pParamName As String, pOperation As tOperationType, ParamArray pdata())
   Dim i, tmp, vData
   vData = pdata
@@ -231,13 +526,13 @@ Next
 End Function
 
 Function LPad(s As String, ch As String, TotalCnt As Integer) As String
- Dim T As Double
- T = (TotalCnt - Len(s)) \ Len(ch)
- If T - Int(T) > 0 Then T = Int(T) + 1
+ Dim t As Double
+ t = (TotalCnt - Len(s)) \ Len(ch)
+ If t - Int(t) > 0 Then t = Int(t) + 1
  LPad = s
- Do While T > 0
+ Do While t > 0
   LPad = ch & LPad
-  T = T - 1
+  t = t - 1
  Loop
  LPad = Right(LPad, TotalCnt)
 End Function
@@ -601,7 +896,7 @@ Public Function PrepareRTF(sFile As String) As String
 ' tf.Write ts
 ' tf.Close
  
- re.MultiLine = True
+ re.Multiline = True
  re.IgnoreCase = True
  re.Global = False
  re.Pattern = "^\s*[_0-9а-яa-zё]+\s*\(.*\)$"
@@ -757,7 +1052,8 @@ Public Function PrepareRTF(sFile As String) As String
          
      Case "calc"
        Res = Res & "CALC" & LPad(Hex(Len(sTXT)), "0", 3) & sTXT
-       
+     Case "next"
+       Res = Res & "CONT" & LPad(Hex(Len(sOpt)), "0", 3) & sOpt
      Case "fld", "f"
       If SFMT = "\no" Then
        Res = Res & "PRVL" & LPad(Hex(Len(sOpt)), "0", 3) & sOpt
@@ -844,7 +1140,7 @@ Public Function PrepareRTF(sFile As String) As String
  If MetList <> "" Then Res = sOpt & Mid(Res, Len(sOpt) + 1) & MetList & "RETC"
  
  If iStrucLevel > 1 Then
-  MsgBox IIf(aStrucStack(iStrucLevel)(0) <> 10, "В ходе разбора файла обнаружен не закрытый блок IF. ", "") & IIf(aStrucStack(iStrucLevel)(0) = 10, "В ходе разбора файла обнаружен не закрытый блок SCAN.", "")
+  MsgBox IIf(aStrucStack(iStrucLevel - 1)(0) <> 10, "В ходе разбора файла обнаружен не закрытый блок IF. ", "") & IIf(aStrucStack(iStrucLevel - 1)(0) = 10, "В ходе разбора файла обнаружен не закрытый блок SCAN.", "")
   Exit Function
  End If
 
@@ -888,6 +1184,8 @@ Dim sFnc As String
 Dim aArg(16) As Variant, iArg As Integer
 Dim nvSP As Integer, Item
       Dim objXML, objDocElem
+      Dim byteStorage() As Byte
+      Dim BCWidth
 
 'Пропускаем не значищие пробелы
 Do While Mid(Formula, StartPos, 1) = " "
@@ -1042,7 +1340,7 @@ Else
     Set objRegExp = CreateObject("VBScript.RegExp")
     objRegExp.Global = False
     objRegExp.IgnoreCase = True
-    objRegExp.MultiLine = False
+    objRegExp.Multiline = False
     'Фильтр по умолчанию настроен на картинки
     If aArg(1) <> "" Then objRegExp.Pattern = aArg(1) Else objRegExp.Pattern = ".+\.(jpg|jpeg|png|emf)$"
     
@@ -1060,27 +1358,43 @@ Else
           Exit For
       End If
     Next
+    
+  Case "ean13"
+    If aArg(0) <> "" Then
+      byteStorage = StrConv(zebra2wmf(EAN13(aArg(0), False), 2, 40, BCWidth), vbFromUnicode)
+      GoTo byteStorageTpPic
+    Else
+      GetValue = Empty
+    End If
+  Case "code128"
+    If aArg(0) <> "" Then
+      byteStorage = StrConv(zebra2wmf(code128(aArg(0), 3), 2, 40, BCWidth), vbFromUnicode)
+      GoTo byteStorageTpPic
+    Else
+      GetValue = Empty
+    End If
   Case "rtfimg"
     If IsNull(aArg(0)) Then
       GetValue = ""
     ElseIf TypeName(aArg(0)) <> "byte()" Then
       GetValue = "{Здесь должно быть изображение: " & aArg(0) & "}"
     Else
-    
+      byteStorage = aArg(0)
+      
+byteStorageTpPic:
       GetValue = "{\*\shppict{\pict\picwgoal" & Int(aArg(1) * 56.6929133858) & "\pichgoal" & Int(aArg(2) * 56.6929133858)
       
-      Select Case GetTypeContent(aArg(0))
+      Select Case GetTypeContent(byteStorage)
        Case "jpg": GetValue = GetValue & "\jpegblip" & vbCrLf
        Case "png": GetValue = GetValue & "\pngblip" & vbCrLf
        Case "emf": GetValue = GetValue & "\emfblip" & vbCrLf
+       Case "wmf": GetValue = GetValue & "\wmetafile7" & vbCrLf
       End Select
-      
-
       
       Set objXML = CreateObject("MSXml2.DOMDocument")
       Set objDocElem = objXML.createElement("Base64Data")
       objDocElem.DataType = "bin.hex"
-      objDocElem.nodeTypedValue = aArg(0)
+      objDocElem.nodeTypedValue = byteStorage
       sFnc = objDocElem.text
     
       Set objDocElem = Nothing
@@ -1110,6 +1424,7 @@ Else
   Case "calc"
    ParamList("" & aArg(0)) = aArg(1)
    GetValue = "" & aArg(0)
+  
   Case Else
    On Error GoTo OnNoFunction
    GetValue = Application.Run(sFnc, ParamList, aArg)
@@ -1359,6 +1674,34 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
       dic("@SYS_CurrentRecordSet") = aRecordSet
       PC = PC + 12
     End If
+    
+    
+   Case "CONT"
+    'Переходим к следующей записи
+    iCnt = CInt("&h" & Mid(ts, PC + 4, 3))
+    sValue = Mid(ts, PC + 7, iCnt)
+    PC = PC + iCnt + 7
+    On Error Resume Next
+    sValue = Application.Eval(sValue)
+    If Err Then
+      On Error GoTo 0
+      sValue = GetValue(sValue, dic, 1)
+    Else
+      On Error GoTo 0
+    End If
+    
+    If Not FetchRow(dic, sValue) Then
+      'Очиcтим все переменные с указанным префиксом
+      sValue = UCase(sValue & ".")
+      Dim l, sKey
+      l = Len(sValue)
+      For Each sKey In dic.Keys()
+        If UCase(Mid(sKey, 1, l)) = sValue Then
+          If UCase(sKey) <> sValue & "EOF" Then dic(sKey) = Empty
+        End If
+      Next
+      
+    End If
    Case Else
     Err.Raise 1001, , "Шаблон поломался :("
   End Select
@@ -1367,11 +1710,28 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
 End Function
 
 'Извлечение из текущего курсора очередной строки
-Public Function FetchRow(ByRef pdic)
+Public Function FetchRow(ByRef pdic, Optional ByVal pCursorName As String = "")
   Dim vRecordSet, vCursorName, vFiles, tmpdic, fld
-   vRecordSet = pdic("@SYS_CurrentRecordSet")
-  vCursorName = vRecordSet(0)
-  Set vRecordSet = vRecordSet(1)
+  
+  vRecordSet = pdic("@SYS_CurrentRecordSet")
+  If pCursorName = "" Then
+    vCursorName = vRecordSet(0)
+    Set vRecordSet = vRecordSet(1)
+  Else
+    vCursorName = pCursorName
+    Do While True
+      If UCase(vRecordSet(0)) = UCase(pCursorName) Then
+        Set vRecordSet = vRecordSet(1)
+        Exit Do
+      End If
+      If Not IsArray(vRecordSet(2)) Then
+        'Не нашли курсор с указанным именем
+        FetchRow = False
+        Exit Function
+      End If
+      vRecordSet = vRecordSet(2)
+    Loop
+  End If
   If Not vRecordSet.EOF Then
     For Each fld In vRecordSet.Fields
       If IsObject(fld.Value) Then
@@ -1401,6 +1761,7 @@ Public Function FetchRow(ByRef pdic)
     FetchRow = True
   Else
     FetchRow = False
+    pdic(vCursorName & ".EOF") = True
   End If
   Set vRecordSet = Nothing
 End Function
@@ -1432,7 +1793,7 @@ Public Function GetExt(FullPath As String) As String
   If lngLastPos <> 0 Then GetExt = Right$(FullPath, Len(FullPath) - lngLastPos + 1)
 End Function
 
-Function ReadBLOB(Source As String, T As Recordset, sField As String)
+Function ReadBLOB(Source As String, t As Recordset, sField As String)
     Dim NumBlocks As Integer, SourceFile As Integer, i As Integer
     Dim FileLength As Long, LeftOver As Long
     Dim lngMeter As Long
@@ -1454,14 +1815,14 @@ Function ReadBLOB(Source As String, T As Recordset, sField As String)
     If LeftOver > 0 Then
       ReDim byteData(0 To LeftOver - 1)
       Get SourceFile, , byteData
-      T(sField).AppendChunk (byteData)
+      t(sField).AppendChunk (byteData)
     End If
     lngMeter = LeftOver \ 1000
     RetVal = SysCmd(acSysCmdUpdateMeter, lngMeter)
     ReDim byteData(0 To BlockSize - 1)
     For i = 1 To NumBlocks
         Get SourceFile, , byteData
-        T(sField).AppendChunk (byteData)
+        t(sField).AppendChunk (byteData)
         lngMeter = BlockSize * i \ 1000
         RetVal = SysCmd(acSysCmdUpdateMeter, lngMeter)
     Next i
@@ -1475,14 +1836,14 @@ Err_ReadBLOB:
 End Function
 
 
-Function WriteBLOB(T As Recordset, sField As String, Destination As String)
+Function WriteBLOB(t As Recordset, sField As String, Destination As String)
     Dim NumBlocks As Integer, DestFile As Integer, i As Integer
     Dim FileLength As Long, LeftOver As Long
     Dim lngMeter As Long
     Dim byteData() As Byte
     Dim RetVal As Variant
     On Error GoTo Err_WriteBLOB
-    FileLength = T(sField).FieldSize()
+    FileLength = t(sField).FieldSize()
     If FileLength = 0 Then
         WriteBLOB = 0
         Exit Function
@@ -1494,13 +1855,13 @@ Function WriteBLOB(T As Recordset, sField As String, Destination As String)
     lngMeter = FileLength \ 1000
     RetVal = SysCmd(acSysCmdInitMeter, "Writing BLOB", lngMeter)
     If LeftOver > 0 Then
-      byteData() = T(sField).GetChunk(0, LeftOver)
+      byteData() = t(sField).GetChunk(0, LeftOver)
       Put DestFile, , byteData
     End If
     lngMeter = LeftOver \ 1000
     RetVal = SysCmd(acSysCmdUpdateMeter, lngMeter)
     For i = 1 To NumBlocks
-        byteData() = T(sField).GetChunk((i - 1) * BlockSize _
+        byteData() = t(sField).GetChunk((i - 1) * BlockSize _
            + LeftOver, BlockSize)
         Put DestFile, , byteData
         lngMeter = (i * BlockSize + LeftOver) \ 1000
@@ -1533,8 +1894,10 @@ Function GetTypeContent(ByRef tpData)
           GetTypeContent = "не распознан"
         End If
       ElseIf tpData(0) = &H1 Then
-        If tpData(1) = &H0 And tpData(2) = &H0 And tpData(3) = &H0 Then
+        If tpData(1) = &H0 And tpData(2) = &H0 And tpData(3) = &H0 And tpData(&H28) = &H20 And tpData(&H29) = &H45 And tpData(&H2A) = &H4D And tpData(&H2B) = &H46 Then
           GetTypeContent = "emf"
+        ElseIf tpData(1) = &H0 And (tpData(5) = &H1 Or tpData(5) = &H3) And tpData(4) = &H0 Then
+          GetTypeContent = "wmf"
         Else
           GetTypeContent = "не распознан"
         End If
@@ -1888,3 +2251,17 @@ Public Function SelectFirstColumn(sql As String) As Variant()
  Set rsdao = Nothing
  SelectFirstColumn = avResult
 End Function
+
+
+
+
+
+
+Public Sub Main()
+   Dim b() As Byte
+   Dim s As String
+   s = "Whatever"
+   b = s  'Assign Unicode string to bytes.'
+   s = b  'Works in reverse, too!'
+   Debug.Print s
+End Sub
