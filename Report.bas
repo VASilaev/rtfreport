@@ -256,6 +256,10 @@ Function code128(SourceString, return_type)
      i = i + 1
    Loop
    
+   If code128 = "" Then
+     Exit Function
+   End If
+   
    checkDigitValue = Asc(Mid(code128, 1, 1)) - 100
    For i = 2 To Len(code128)
      n = Asc(Mid(code128, i, 1))
@@ -329,8 +333,8 @@ Function block(fnc, data)
   block = longToByte((Len(block) \ 2) + 2) & block
 End Function
 
-Function Point(x, y)
-  Point = intToByte(x) & intToByte(y)
+Function Point(X, Y)
+  Point = intToByte(X) & intToByte(Y)
 End Function
 
 Function color(r, g, b)
@@ -371,6 +375,11 @@ End Function
 Function EAN13(Code, addCheckSum)
   Dim sCode, zebra, codeSchema, i
   sCode = Code & ""
+  
+  If Not isNumber(sCode) Then Exit Function
+  
+  
+  
   If addCheckSum Then Code = Code & EAN13CheckNumber(sCode)
 
   sCode = Right("0000000000000" & Code, 13)
@@ -2251,17 +2260,3 @@ Public Function SelectFirstColumn(sql As String) As Variant()
  Set rsdao = Nothing
  SelectFirstColumn = avResult
 End Function
-
-
-
-
-
-
-Public Sub Main()
-   Dim b() As Byte
-   Dim s As String
-   s = "Whatever"
-   b = s  'Assign Unicode string to bytes.'
-   s = b  'Works in reverse, too!'
-   Debug.Print s
-End Sub
