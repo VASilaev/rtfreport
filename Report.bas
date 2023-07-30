@@ -180,10 +180,15 @@ Function code128(SourceString, return_type)
 
   Dim i, dataToFormat, n, currentEncoding, weightedTotal, checkDigitValue, stringlen, currentValue, dataToPrint
   
+ If IsNull(SourceString) Then Exit Function
+ If SourceString = "" Then Exit Function
+ 
+  
  i = 1
  dataToFormat = Trim(SourceString)
  stringlen = Len(dataToFormat)
 
+ 
 
  If return_type = 1 Then
    'Просто форматируем в переданное значение
@@ -328,13 +333,13 @@ Function intToByte(i)
   intToByte = intToByte & Chr(ti Mod 256)
 End Function
 
-Function block(fnc, data)
-  block = intToByte(fnc) & data
+Function block(fnc, Data)
+  block = intToByte(fnc) & Data
   block = longToByte((Len(block) \ 2) + 2) & block
 End Function
 
-Function Point(X, Y)
-  Point = intToByte(X) & intToByte(Y)
+Function Point(x, y)
+  Point = intToByte(x) & intToByte(y)
 End Function
 
 Function color(r, g, b)
@@ -344,6 +349,11 @@ End Function
 Function rectaspoligon(ByRef objCount, l, t, r, b)
   objCount = objCount + 1
   rectaspoligon = block(&H324, intToByte(4) & Point(l, b) & Point(l, t) & Point(r, t) & Point(r, b))
+End Function
+
+Function rect(ByRef objCount, l, t, r, b)
+  objCount = objCount + 1
+  rect = block(&H41B, intToByte(b) & intToByte(r) & intToByte(t) & intToByte(l))
 End Function
 
 Function CreatePenIndirect(ByRef objCount, PenStyle, pPoint, pColor)
@@ -419,7 +429,7 @@ End Function
 
 
 Function zebra2wmf(s, xFactor, yFactor, ByRef MaxWidth)
-  Dim recs, objCount, i, l, largest, size
+  Dim recs, objCount, i, l, largest, Size
   recs = Empty
   objCount = 0
   addInArray recs, CreatePenIndirect(objCount, 0, Point(0, 0), color(255, 0, 0))
@@ -435,11 +445,11 @@ Function zebra2wmf(s, xFactor, yFactor, ByRef MaxWidth)
       l = l + 1
     Loop
     If Mid(s, i, 1) = "|" Then
-      addInArray recs, rectaspoligon(objCount, i * xFactor, 0, (i + l) * xFactor - 1, yFactor)
+      addInArray recs, rect(objCount, i * xFactor, 0, (i + l) * xFactor, yFactor)
     ElseIf Mid(s, i, 1) = "." Then
-      addInArray recs, rectaspoligon(objCount, i * xFactor, yFactor, i * xFactor, yFactor)
+      addInArray recs, rect(objCount, i * xFactor, yFactor, i * xFactor, yFactor)
     ElseIf Mid(s, i, 1) = "L" Then
-      addInArray recs, rectaspoligon(objCount, i * xFactor, 0, (i + l) * xFactor - 1, yFactor * 1.2)
+      addInArray recs, rect(objCount, i * xFactor, 0, (i + l) * xFactor, yFactor * 1.2)
     End If
     MaxWidth = (i + l) * xFactor
     i = i + l
@@ -450,17 +460,16 @@ Function zebra2wmf(s, xFactor, yFactor, ByRef MaxWidth)
   For Each i In recs
     If Len(i) / 2 > largest Then largest = Len(i) / 2
   Next
-  size = Len(zebra2wmf) / 2 + 9
+  Size = Len(zebra2wmf) / 2 + 9
   zebra2wmf = intToByte(1) & _
      intToByte(9) & _
      intToByte(&H100) & _
-     intToByte(size Mod &H10000) & _
-     intToByte(size \ &H10000) & _
+     intToByte(Size Mod &H10000) & _
+     intToByte(Size \ &H10000) & _
      intToByte(UBound(recs)) & _
      longToByte(largest) & _
      intToByte(0) & zebra2wmf
 End Function
-
 
 Function GetFilter(pParamName As String, pOperation As tOperationType, ParamArray pdata())
   Dim i, tmp, vData
@@ -1185,6 +1194,27 @@ Private Function DumpContext(ByRef ParamList As Variant) As String
 
 End Function
 
+Public Function PictureDataToRTF(PictureData, nWidth, nHeight)
+  
+  PictureDataToRTF = "{\*\shppict{\pict\picwgoal" & Int(nWidth * 56.6929133858) & "\pichgoal" & Int(nHeight * 56.6929133858)
+  
+  Select Case GetTypeContent(PictureData)
+   Case "jpg": PictureDataToRTF = PictureDataToRTF & "\jpegblip" & vbCrLf
+   Case "png": PictureDataToRTF = PictureDataToRTF & "\pngblip" & vbCrLf
+   Case "emf": PictureDataToRTF = PictureDataToRTF & "\emfblip" & vbCrLf
+   Case "wmf": PictureDataToRTF = PictureDataToRTF & "\wmetafile7" & vbCrLf
+  End Select
+  
+  
+  Dim objDocElem
+  Set objDocElem = CreateObject("MSXml2.DOMDocument").createElement("Base64Data")
+  objDocElem.DataType = "bin.hex"
+  objDocElem.nodeTypedValue = PictureData
+  PictureDataToRTF = PictureDataToRTF & objDocElem.text & "}}"
+  Set objDocElem = Nothing
+
+End Function
+
 Public Function GetValue(Formula As String, ByRef ParamList As Variant, ByRef StartPos As Long) As Variant
 
 Dim StopSym As String
@@ -1371,17 +1401,18 @@ Else
   Case "ean13"
     If aArg(0) <> "" Then
       byteStorage = StrConv(zebra2wmf(EAN13(aArg(0), False), 2, 40, BCWidth), vbFromUnicode)
-      GoTo byteStorageTpPic
+      GetValue = PictureDataToRTF(byteStorage, aArg(1), aArg(2))
     Else
       GetValue = Empty
     End If
   Case "code128"
     If aArg(0) <> "" Then
       byteStorage = StrConv(zebra2wmf(code128(aArg(0), 3), 2, 40, BCWidth), vbFromUnicode)
-      GoTo byteStorageTpPic
+      GetValue = PictureDataToRTF(byteStorage, aArg(1), aArg(2))
     Else
       GetValue = Empty
     End If
+    
   Case "rtfimg"
     If IsNull(aArg(0)) Then
       GetValue = ""
@@ -1389,27 +1420,8 @@ Else
       GetValue = "{Здесь должно быть изображение: " & aArg(0) & "}"
     Else
       byteStorage = aArg(0)
+      GetValue = PictureDataToRTF(byteStorage, aArg(1), aArg(2))
       
-byteStorageTpPic:
-      GetValue = "{\*\shppict{\pict\picwgoal" & Int(aArg(1) * 56.6929133858) & "\pichgoal" & Int(aArg(2) * 56.6929133858)
-      
-      Select Case GetTypeContent(byteStorage)
-       Case "jpg": GetValue = GetValue & "\jpegblip" & vbCrLf
-       Case "png": GetValue = GetValue & "\pngblip" & vbCrLf
-       Case "emf": GetValue = GetValue & "\emfblip" & vbCrLf
-       Case "wmf": GetValue = GetValue & "\wmetafile7" & vbCrLf
-      End Select
-      
-      Set objXML = CreateObject("MSXml2.DOMDocument")
-      Set objDocElem = objXML.createElement("Base64Data")
-      objDocElem.DataType = "bin.hex"
-      objDocElem.nodeTypedValue = byteStorage
-      sFnc = objDocElem.text
-    
-      Set objDocElem = Nothing
-      Set objXML = Nothing
-
-      GetValue = GetValue & sFnc & "}}"
     End If
     
    
