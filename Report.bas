@@ -370,7 +370,7 @@ Function CreateBrushIndirect(objCount, style, color, hatch)
   CreateBrushIndirect = block(&H2FC, intToByte(style) & color & intToByte(hatch))
 End Function
 
-Function EAN13CheckNumber(Code)
+Function EAN13CheckNumber(ByVal Code)
   Dim sCode, i
   sCode = Code & ""
   EAN13CheckNumber = 0
@@ -382,7 +382,7 @@ End Function
 
 
 
-Function EAN13(Code, addCheckSum)
+Function EAN13(ByVal Code, addCheckSum)
   Dim sCode, zebra, codeSchema, i
   sCode = Code & ""
   
@@ -516,7 +516,7 @@ Function BuildParam(pdic, ParamArray pdata())
     If IsArray(vData) Then
       BuildParam pdic, Null, vData(i)
       i = i + 1
-    ElsIf i < UBound(vData)
+    ElseIf i < UBound(vData) Then
       If IsNull(vData(0)) And IsArray(vData(1)) Then
         BuildParam pdic, Null, vData(i + 1)
       Else
@@ -534,6 +534,7 @@ End Function
 
 'Возвращает истину если Value присутствует в массиве arr
 Function InA(Value, arr)
+Dim Item
 InA = False
 For Each Item In arr
    If Item = Value Then
@@ -2119,7 +2120,7 @@ End Function
 
 
 Function decode(spKey As Variant, ParamArray apArgs() As Variant) As Variant
- Dim bvIsNull As Boolean
+ Dim bvIsNull As Boolean, i
  bvIsNull = IsNull(spKey)
  For i = 0 To UBound(apArgs) Step 2
   If i = UBound(apArgs) Then
@@ -2191,6 +2192,7 @@ End Function
 
 
 Public Function Translate(text As String) As String
+ Dim rus, eng, i, j
  rus = "аАбБвВгГдДеЕёЁжЖзЗиИйЙкКлЛмМнНоОпПрРсСтТуУфФхХцЦчЧшШщЩъЪыЫьЬэЭюЮяЯ"
  eng = Array("a", "A", "b", "B", "v", "V", "g", "G", "d", "D", "e", "E", "yo", "Yo", "zh", "Zh", "z", "Z", "i", "I", "j", "J", "k", "K", "l", "L", "m", "M", "n", "N", "o", "O", "p", "P", "r", "R", "s", "S", "t", "T", "u", "U", "f", "F", "kh", "Kh", "ts", "Ts", "ch", "Ch", "sh", "Sh", "sch", "Sch", "", "", "y", "Y", "", "", "e", "E", "yu", "Yu", "ya", "Ya")
  For i = 1 To Len(text)
@@ -2236,7 +2238,7 @@ noRecord:
 End Function
 
 Public Function SelectOneRow(sql As String) As Variant
- 'Dim rsdao As Recordset2
+ Dim rsdao, Field
  Set SelectOneRow = CreateObject("Scripting.Dictionary")
  SelectOneRow.CompareMode = TextCompare
  Set rsdao = CurrentProject.Connection.Execute(sql)
@@ -2251,7 +2253,7 @@ End Function
 
 
 Public Function SelectFirstColumn(sql As String) As Variant()
- Dim nvCnt As Long
+ Dim nvCnt As Long, rsdao
  Dim avResult() As Variant
  ReDim avResult(256)
  Set rsdao = CurrentProject.Connection.Execute(sql)
