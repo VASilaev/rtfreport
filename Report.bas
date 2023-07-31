@@ -1,4 +1,4 @@
-Attribute VB_Name = "Report"
+﻿Attribute VB_Name = "Report"
  Option Compare Text
  Option Explicit
   
@@ -78,7 +78,7 @@ End Sub
 '#param vReport - Идентификатор шаблона. Если число, то ищется в таблице t_rep, в противном случае считается что это имя файла, если его нет то ищем по заголовку в таблице t_rep
 '#param dic  - Слоаварь с окружением можно передать nothing если явных входных параметров нет
 '#param sFile - Имя выходного файла, если его не указать то будет создан во временной папке с именем tmp_n где n - порядковый номер
-Public Sub PrintReport(vReport, ByRef dic As Variant, Optional sFile As String = "")
+Public Sub PrintReport(vReport, Optional ByRef dic As Object, Optional sFile As String = "")
 
  Dim fso
  Dim tf 'As TextStream
@@ -383,6 +383,12 @@ End Function
 
 
 Function EAN13(ByVal Code, addCheckSum)
+
+' es - 31.07.2023
+'
+' -------------------------------------------------------------------------------------------------/
+On Error GoTo EAN13_Err
+
   Dim sCode, zebra, codeSchema, i
   sCode = Code & ""
   
@@ -425,6 +431,19 @@ Function EAN13(ByVal Code, addCheckSum)
   Next
   
   EAN13 = EAN13 & "L L        ."
+  ' -------------------------------------------------------------------------------------------------/
+EAN13_End:
+    On Error Resume Next
+    Err.Clear
+    Exit Function
+' -------------------------------------------------------------------------------------------------/
+EAN13_Err:
+    MsgBox "Error " & Err.Number & " (" & Err.Description & ") in Function :" & _
+        "EAN13 - Report.", vbCritical, "Error!"
+    'Debug.Print "EAN13_Line: " & Erl & "."
+    Err.Clear
+    EAN13 = Empty
+    Resume EAN13_End
 End Function
 
 
@@ -2238,15 +2257,16 @@ noRecord:
 End Function
 
 Public Function SelectOneRow(sql As String) As Variant
- Dim rsdao, Field
+ Dim rsdao, objField
  Set SelectOneRow = CreateObject("Scripting.Dictionary")
- SelectOneRow.CompareMode = TextCompare
+ SelectOneRow.CompareMode = 1 ' 1 = TextCompare
  Set rsdao = CurrentProject.Connection.Execute(sql)
  If Not rsdao.EOF Then
-  For Each Field In rsdao.Fields
-   SelectOneRow.Add Field.Name, Field.Value
+  For Each objField In rsdao.Fields
+   SelectOneRow.Add objField.Name, objField.Value
   Next
  End If
+ Set objField = Nothing
  rsdao.Close
  Set rsdao = Nothing
 End Function
