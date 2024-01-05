@@ -1235,7 +1235,7 @@ Public Function PictureDataToRTF(PictureData, nWidth, nHeight)
 
 End Function
 
-Public Function GetValue(Formula As String, ByRef ParamList As Variant, ByRef StartPos As Long) As Variant
+Public Function GetValue(Formula As Variant, ByRef ParamList As Variant, ByRef StartPos As Long) As Variant
 
 Dim StopSym As String
 Dim CP As Integer
@@ -1584,7 +1584,7 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
  Dim aRetCall(128) As Long
  Dim iRC As Integer
  Dim sfncConvert As String
- Dim sValue As String, sName, sAlias As String, fld
+ Dim sValue As Variant, sName, sAlias As String, fld
  
  Set fso = CreateObject("scripting.FileSystemObject")
  
