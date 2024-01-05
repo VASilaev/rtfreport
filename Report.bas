@@ -1623,7 +1623,15 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
     sValue = Application.Eval(sValue)
     If Err Then
       On Error GoTo 0
-      sValue = GetValue(sValue, dic, 1)
+      Dim StartPos As Long, sFormula As Variant, sFormat As String
+      StartPos = 1
+      sFormula = sValue
+      sValue = GetValue(sFormula, dic, StartPos)
+      StartPos = StartPos + 1
+      If StartPos < Len(sFormula) Then
+        sFormat = GetValue(sFormula, dic, StartPos)
+        sValue = Format(sValue, sFormat)
+      End If
     Else
       On Error GoTo 0
     End If
