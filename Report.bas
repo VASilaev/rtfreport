@@ -176,6 +176,33 @@ onCreate:
 End Function
 
 
+Function GetFilter(pParamName As String, pOperation As tOperationType, ParamArray pdata())
+  Dim i, tmp, vData
+  vData = pdata
+  
+  If UBound(vData) = 0 Then
+    If IsArray(vData(0)) Then vData = vData(0)
+  End If
+  i = UBound(vData) + 1
+  
+  tmp = Array()
+  ReDim tmp(i * 2 + 4)
+  
+  tmp(0) = pParamName & ".type"
+  tmp(1) = Left(pParamName, 1)
+  
+  If tmp(1) = "i" Then tmp(1) = "n"
+  If Not (tmp(1) = "s" Or tmp(1) = "d" Or tmp(1) = "n") Then tmp(1) = "s"
+  
+  tmp(2) = pParamName & ".oper"
+  tmp(3) = pOperation
+
+  For i = LBound(vData) To UBound(vData)
+    tmp(i * 2 + 4) = pParamName & ".value" & IIf(i = 0, "", i)
+    tmp(i * 2 + 5) = vData(i)
+  Next
+GetFilter = tmp
+End Function
 
 
 Function BuildParam(pDic, ParamArray pdata())
