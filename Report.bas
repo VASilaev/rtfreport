@@ -176,36 +176,50 @@ onCreate:
 End Function
 
 
-Function GetFilter(pParamName As String, pOperation As tOperationType, ParamArray pdata())
+Function GetFilter(pParamName As String, pOperation As tOperationType, ParamArray pData())
+'Подготавливает операцию фильтра для применения в отчете
+'#param pParamName: Имя параметра фильтра
+'#param pOperation: Оператор фильтра
+' {*} opEQ (1) - равно
+' {*} opNEQ (2) - не равно
+' {*} opGR (4) - больше
+' {*} opLS (8) - меньше
+' {*} opNLS (16) - не меньше
+' {*} opNGR (32) - не больше
+' {*} opIN (128) - в списке, в `pData` можно передать массив значений или передать несколько значений
+' {*} opNIN (256) - не в списке, в `pData` можно передать массив значений или передать несколько значений
+' {*} opcont (512) - содержит
+' {*} opSTART (1024) - начинается
+' {*} opBTW (2048) - между, для всех значений **между** необходимо передать два операнда в качестве границ диапазонов. Если одна из границ - `NULL`, то граница не применяется
+' {*} opBTWWL (6144) - между без левого
+' {*} opBTWWR (10240) - между без правого
+' {*} opBTWWB (14336) - между без обоих
+' {*} opNCont (32768) - не содержит
+'#param pData: Один или несколько значений параметра фильтра
+
+
   Dim i, tmp, vData
-  vData = pdata
+  vData = pData
   
-  If UBound(vData) = 0 Then
-    If IsArray(vData(0)) Then vData = vData(0)
-  End If
+  If UBound(vData) = 0 Then If IsArray(vData(0)) Then vData = vData(0)
+  
   i = UBound(vData) + 1
   
   tmp = Array()
   ReDim tmp(i * 2 + 4)
   
-  tmp(0) = pParamName & ".type"
-  tmp(1) = Left(pParamName, 1)
-  
-  If tmp(1) = "i" Then tmp(1) = "n"
-  If Not (tmp(1) = "s" Or tmp(1) = "d" Or tmp(1) = "n") Then tmp(1) = "s"
-  
-  tmp(2) = pParamName & ".oper"
-  tmp(3) = pOperation
+  tmp(0) = pParamName & ".oper"
+  tmp(1) = pOperation
 
-  For i = LBound(vData) To UBound(vData)
-    tmp(i * 2 + 4) = pParamName & ".value" & IIf(i = 0, "", i)
-    tmp(i * 2 + 5) = vData(i)
+  For i = 0 To UBound(vData)
+    tmp(i * 2 + 2) = pParamName & ".value" & IIf(i = 0, "", i)
+    tmp(i * 2 + 3) = vData(i)
   Next
 GetFilter = tmp
 End Function
 
 
-Function BuildParam(pDic, ParamArray pdata())
+Function BuildParam(pDic, ParamArray pData())
 'Обновляет в контексте переменные
 '`BuildParam(pDic, Key, Value [, Key, Value])`
 '#param pDic: Текст
@@ -213,20 +227,22 @@ Function BuildParam(pDic, ParamArray pdata())
 '#param Value: Значение переменной. Объекты должны быть завернуты в массив: `array(MyObject)`
 
   Dim i, tmp, vData
-  vData = pdata
+  vData = pData
   If UBound(vData) = 1 Then
     If IsNull(vData(0)) And IsArray(vData(1)) Then vData = vData(1)
   End If
   
   If pDic Is Nothing Then
-    Set pDic = CreateObject("Scripting.Dictionary")
-    pDic.CompareMode = 1
+    Set BuildParam = CreateObject("Scripting.Dictionary")
+    BuildParam.CompareMode = 1
+  Else
+    Set BuildParam = pDic
   End If
  
   i = LBound(vData)
   Do While i <= UBound(vData)
-    If IsArray(vData) Then
-      BuildParam pDic, Null, vData(i)
+    If IsArray(vData(i)) Then
+      BuildParam BuildParam, Null, vData(i)
       i = i + 1
     ElseIf i < UBound(vData) Then
       If IsNull(vData(0)) And IsArray(vData(1)) Then
@@ -240,7 +256,6 @@ Function BuildParam(pDic, ParamArray pdata())
     End If
     
   Loop
-  Set BuildParam = pDic
 End Function
 
 
@@ -1429,6 +1444,10 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
     GetValue Mid(ts, PC + 7, iCnt), dic, 1
     PC = PC + iCnt + 7
    Case "GOTO"
+'<DOC>
+'`GOTO A[8]`
+'Делает безусловный прыжок по указанному адресу
+'- `A` - Новый адрес
     PC = CLng("&h" & Mid(ts, PC + 4, 8))
     
    Case "JUMP"
@@ -1555,9 +1574,6 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
 'Переход к следующей записи внутри цикла
 '- `N` - Длина выражения
 '- `V` - Выражение, результатом которого должно быть имя набора данных. Если результат - пустая строка, то используется текущий набор данных
-
-'ToDo: Для единообразия перенести в CALC и использовать как функцию
-
     iCnt = CInt("&h" & Mid(ts, PC + 4, 3))
     sValue = Mid(ts, PC + 7, iCnt)
     PC = PC + iCnt + 7
@@ -1616,6 +1632,7 @@ Public Function FetchRow(ByRef pDic, Optional ByVal pCursorName As String = "")
       vRecordSet = vRecordSet(2)
     Loop
   End If
+  
   If Not vRecordSet.EOF Then
     For Each fld In vRecordSet.Fields
       If IsObject(fld.Value) Then
@@ -1732,10 +1749,10 @@ Function FilterFmt(Text As String, ByRef p_Dic As Variant) As String
 'Подстановочные символы обрамляются символом `%`. Если нужно вывести символ как есть то его необходимо удвоить `%%`. Значение ключа ищется в словаре.
 'Если такого значения нет, то будет предпринята попытка получить значение через Eval
 '#param Text: Исходный тест с подстановками.
-'К подстановочному значению можно применить операции форматирования, для этого нужно после ключа через символ `;` указать способ формтирования.
+'К подстановочному значению можно применить операции форматирования, для этого нужно после ключа через символ `;` указать способ форматирования.
 'Доступные варианты форматирования:
-' {*} stdf:<имя_фильтра> - операция применения фильтра. см. отдельную справку по форматированию фильтров.
-' {*} sqldate:<значение_по_умолчанию> - Форматирует дату как SQL литерал. Если значение является Null, то берется <значение_по_умолчанию> как есть. Значение по умолчанию не обязательно и опускается вместе с символом `:`
+' {*} stdf:<имя_поля> - операция применения фильтра к полю заданному в формате. Имя фильтра берется из строки до `;`.
+' {*} sqldate:<значение_по_умолчанию> - Форматирует дату как SQL литерал. Если значение является Null, то берется `<значение_по_умолчанию>` как есть. Значение по умолчанию не обязательно и опускается вместе с символом `:`
 ' Специальный подстановочный имена полей
 ' {*} fnc<Имя_функции>:<Ключ в словаре> - Применение пользовательской функции для форматирования значения
 ' {*} get:<Выражение> - <Выражение> пропускается через функцию GetValue и подставляется значение
@@ -1790,97 +1807,89 @@ Function FilterFmt(Text As String, ByRef p_Dic As Variant) As String
     sKey = Trim(Mid(smid, 1, pt - 1))
     
     If LCase(Left(SFMT, 5)) = "stdf:" Then 'Формирование фильтра по полю
-     SFMT = Mid(SFMT, 6)
+     SFMT = Trim(Mid(SFMT, 6))
+ 
+     If Not p_Dic.Exists(sKey & ".oper") Then idOperation = 0 Else idOperation = p_Dic(sKey & ".oper")
 
-     If Not p_Dic.Exists(sKey & ".oper") Or p_Dic(sKey & ".oper") = 0 Then 'Если операция не указана то ни чего не выводим
+     If idOperation = 0 Then 'Если операция не указана то ни чего не выводим
       smid = ""
      Else
-        idOperation = p_Dic(sKey & ".oper")
-        sPrefix = p_Dic(sKey & ".type") 'Базовый тип операнда
+       If idOperation = opIN Or idOperation = opNIN Then 'In, Not in
         
-        If idOperation = opIN Or idOperation = opNIN Then 'In, Not in
-        
-         Dim sList As String
+         Dim sList As String, vValue As Variant, bEmptyList As booelan, i As Integer
          sList = ""
-         Dim i As Integer
+         bEmptyList = True
+         i = 0
          Do While p_Dic.Exists(sKey & ".value" & IIf(i > 0, "" & i, ""))
-           If i > 0 Then sList = sList & ","
-           Select Case LCase(sPrefix)
-             Case "s"
-               sList = sList & "'" & Replace(p_Dic(sKey & ".value" & IIf(i > 0, "" & i, "")), "'", "''") & "'"
-             Case "d"
-               sList = sList & fncDateToSTR(p_Dic(sKey & ".value" & IIf(i > 0, "" & i, "")))
-             Case "n"
-               sList = sList & Replace("" & p_Dic(sKey & ".value" & IIf(i > 0, "" & i, "")), ",", ".")
-           End Select
+           bEmptyList = False
+           vValue = p_Dic(sKey & ".value" & IIf(i > 0, "" & i, ""))
+           If Not (IsNull(vValue) Or IsEmpty(vValue)) Then
+             If Len(sList) > 0 Then sList = sList & ","
+             sList = sList & ToSQL(vValue)
+           End If
          Loop
          
-         smid = " and " & IIf(idOperation = opNIN, "not ", "") & " in ( " & sList & ")"
-
-        Else
-         sOperand = p_Dic(sKey & ".value") ' с чем сравниваем, значение параметра
-         
-         If IsNull(sOperand) Then
-           sOperand = "(null)"
+         If sList = "" Then
+           'Пустой список - без условий, 'Если все значения Null, то условие всегда ложно
+           If bEmptyList Then smid = "" Else smid = "(1=0)"
          Else
-            Select Case sPrefix
-             Case "d"
-              sOperand = fncDateToSTR(sOperand)
-             Case "s"
-              sOperand = "'" & sOperand & "'"
-            End Select
+           smid = " and " & IIf(idOperation = opNIN, "not ", "") & SFMT & " in ( " & sList & ")"
          End If
-         
+
+       Else
+         sOperand = p_Dic(sKey & ".value") ' с чем сравниваем, значение параметра
+         If IsEmpty(sOperand) Then sOperand = Null
+                  
          If (idOperation And opBTW) = opBTW Then '  для операторов between собираем второе значение
           sOperand2 = p_Dic(sKey & ".value1")
-          
-          If IsNull(sOperand2) Then
-           sOperand2 = "(null)"
-          Else
-           Select Case sPrefix
-            Case "d"
-             sOperand2 = fncDateToSTR(sOperand2)
-            Case "s"
-             sOperand2 = "'" & Replace(sOperand2, "'", "''") & "'"
-           End Select
-          End If
-          
-          smid = " and " & sOperand & IIf((idOperation And 4096) = 0, " <= ", " < ") & SFMT
-          smid = smid & " and " & SFMT & IIf((idOperation And 8192) = 0, " <= ", " < ") & sOperand2
+          If IsEmpty(sOperand2) Then sOperand2 = Null
+
+          'Значение Null дает открытую границу
+          If Not IsNull(sOperand) Then smid = " and " & ToSQL(sOperand) & IIf((idOperation And 4096) = 0, " <= ", " < ") & SFMT
+          If Not IsNull(sOperand2) Then smid = smid & " and " & SFMT & IIf((idOperation And 8192) = 0, " <= ", " < ") & ToSQL(sOperand2)
          Else
+          Dim sAnyCharPattern
           Select Case idOperation
            Case opEQ
-            smid = " and " & SFMT & " = " & sOperand
+            If IsNull(sOperand) Then
+              smid = " and " & SFMT & " is NULL"
+            Else
+              smid = " and " & SFMT & " = " & ToSQL(sOperand)
+            End If
            Case opNEQ
-            smid = " and " & SFMT & " <> " & sOperand
+            If IsNull(sOperand) Then
+              smid = " and not " & SFMT & " is NULL"
+            Else
+              smid = " and " & SFMT & " <> " & ToSQL(sOperand)
+            End If
            Case opGR
-            smid = " and " & SFMT & " > " & sOperand
+            smid = " and " & SFMT & " > " & ToSQL(sOperand)
            Case opLS
-            smid = " and " & SFMT & " < " & sOperand
+            smid = " and " & SFMT & " < " & ToSQL(sOperand)
            Case opNLS
-            smid = " and " & SFMT & " >= " & sOperand
+            smid = " and " & SFMT & " >= " & ToSQL(sOperand)
            Case opNGR
-            smid = " and " & SFMT & " <= " & sOperand
+            smid = " and " & SFMT & " <= " & ToSQL(sOperand)
            Case opcont
-            smid = " and " & SFMT & " like '" & p_Dic("%") & Mid(sOperand, 2, Len(sOperand) - 2) & p_Dic("%") & "'"
+            sAnyCharPattern = p_Dic("%")
+            smid = " and " & SFMT & " like '" & sAnyCharPattern & sOperand & sAnyCharPattern & "'"
            Case opSTART
-            smid = " and " & SFMT & " like '" & Mid(sOperand, 2, Len(sOperand) - 2) & p_Dic("%") & "'"
+            smid = " and " & SFMT & " like '" & sOperand & p_Dic("%") & "'"
            Case opNCont
-            smid = " and not " & SFMT & " like '" & p_Dic("%") & Mid(sOperand, 2, Len(sOperand) - 2) & p_Dic("%") & "'"
+            sAnyCharPattern = p_Dic("%")
+            smid = " and not " & SFMT & " like '" & sAnyCharPattern & sOperand & sAnyCharPattern & "'"
           End Select
          End If
-        End If
-      End If
+       End If
+     End If
     ElseIf Left(LCase(SFMT), 7) = "sqldate" Then
-     SFMT = Split(SFMT, ":")
-     If IsNull(p_Dic(sKey)) Or IsEmpty(p_Dic(sKey)) Then
-      If UBound(SFMT) > 0 Then
-       smid = SFMT(1)
-      Else
-       smid = "(null)"
-      End If
+     sOperand = p_Dic(sKey) ' с чем сравниваем, значение параметра
+     If IsEmpty(sOperand) Then sOperand = Null
+     If IsNull(sOperand) Then
+      i = InStr(SFMT, ":")
+      If i > 0 Then smid = ToSQL(CDate(Mid(SFMT, i + 1))) Else smid = "(null)"
      Else
-      smid = fncDateToSTR(p_Dic(sKey))
+      smid = ToSQL(sOperand)
      End If
     ElseIf LCase(Left(sKey, 3)) = "fnc" Then
      smid = Application.Run(sKey, p_Dic(SFMT))
@@ -1955,18 +1964,6 @@ Function InSetInner(spKey As Variant, apArgs As Variant) As Boolean
 End Function
 
 
-Public Function fncDateToSTR(dDate) As String
-'Форматирует дату в литерал для использования в SQL запросе
-'#param dDate: Дата
- If IsNull(dDate) Then
-   fncDateToSTR = "NULL"
- Else
-   fncDateToSTR = "#" & Format(dDate, "mm\/dd\/yyyy hh:nn:ss") & "#"
- End If
-End Function
-
-
-
 Public Function SelectOneValue(sql As String) As Variant
 'Выполняет запрос и значение из первой колонки первой строки
 '#param SQL: Текст запроса
@@ -1984,6 +1981,35 @@ noRecord:
  Set rsdao = Nothing
 End Function
 
+
+Public Function ToSQL(pValue)
+'Преобразует значение в SQL литерал
+'#param pValue: Значение, в зависисмости от типа будет разная форма литерала
+
+  Select Case VarType(pValue)
+    Case vbString
+      ToSQL = "'" & Replace(pValue, "'", "''") & "'"
+    Case vbDate
+      If pValue = CLng(pValue) Then
+        ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy") & "#"
+      ElseIf pValue < 1 Then
+        ToSQL = "#" & Format(pValue, "hh:nn:ss") & "#"
+      Else
+        ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy hh:nn:ss") & "#"
+      End If
+    Case vbEmpty, vbNull
+      ToSQL = "NULL"
+    Case vbBoolean
+      If pValue Then ToSQL = "true" Else ToSQL = "false"
+    Case vbInteger, vbLong, 20
+      ToSQL = pValue & ""
+    Case vbSingle, vbDouble, vbCurrency, vbDecimal
+      ToSQL = Replace(pValue & "", ",", ".")
+    'vbByte ?? char
+    Case Else
+      Err.rise 1001, , "Unsupported type of SQL value!"
+  End Select
+End Function
 
 'SUBBLOCK_BEGIN:BARCODE_COMMON
 'Общие функции для формирования штрихкодов в форматe EMF.
