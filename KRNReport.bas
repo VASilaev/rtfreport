@@ -1,3 +1,4 @@
+Attribute VB_Name = "KRNReport"
 Option Compare Text
 Option Explicit
  
