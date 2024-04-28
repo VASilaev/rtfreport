@@ -1,25 +1,46 @@
-﻿Attribute VB_Name = "Report"
- Option Compare Text
- Option Explicit
+Attribute VB_Name = "KRNReport"
+Option Compare Text
+Option Explicit
  
- Public Enum tOperationType
-  opEQ = 1 ' равно
-  opNEQ = 2 ' не равно
-  opGR = 4 ' больше
-  opLS = 8 ' меньше
-  opNLS = 16 ' не меньше
-  opNGR = 32 ' не больше
-  opIN = 128 ' в списке
-  opNIN = 256 ' не в списке
-  opcont = 512 ' содержит
-  opSTART = 1024 ' начинается
-  opBTW = 2048 ' между
-  opBTWWL = 6144 ' между без левого
-  opBTWWR = 10240 ' между без правого
-  opBTWWB = 14336 ' между без обоих
-  opNCont = 32768 ' не содержит
-End Enum
-  
+#If VBA7 Then
+   Public Enum tOperationType
+      opEQ = 1 ' равно
+      opNEQ = 2 ' не равно
+      opGR = 4 ' больше
+      opLS = 8 ' меньше
+      opNLS = 16 ' не меньше
+      opNGR = 32 ' не больше
+      opIN = 128 ' в списке
+      opNIN = 256 ' не в списке
+      opcont = 512 ' содержит
+      opSTART = 1024 ' начинается
+      opBTW = 2048 ' между
+      opBTWWL = 6144 ' между без левого
+      opBTWWR = 10240 ' между без правого
+      opBTWWB = 14336 ' между без обоих
+      opNCont = 32768 ' не содержит
+    End Enum
+ 
+#Else
+    Public Const opEQ = 1 ' равно
+    Public Const opNEQ = 2 ' не равно
+    Public Const opGR = 4 ' больше
+    Public Const opLS = 8 ' меньше
+    Public Const opNLS = 16 ' не меньше
+    Public Const opNGR = 32 ' не больше
+    Public Const opIN = 128 ' в списке
+    Public Const opNIN = 256 ' не в списке
+    Public Const opcont = 512 ' содержит
+    Public Const opSTART = 1024 ' начинается
+    Public Const opBTW = 2048 ' между
+    Public Const opBTWWL = 6144 ' между без левого
+    Public Const opBTWWR = 10240 ' между без правого
+    Public Const opBTWWB = 14336 ' между без обоих
+    Public Const opNCont = 32768 ' не содержит
+
+#End If
+
+
 Public Sub InstallRepSystem()
 'Создает необходимые таблицы. Для хранения шаблонов внутри таблицы
   If Not IsHasRepTable() Then
@@ -37,7 +58,10 @@ Public Sub InstallReportTemplate()
 'Добавляет файл в хранилище шаблонов, после чего сам файл можно удалить, а шаблон вызывать по коду или имени
   InstallRepSystem
 
-  Dim dlgOpenFile, sFileName As String, idReport, sFilePath As String, atmp
+  Dim dlgOpenFile, sFileName As String, idReport, sFilePath As String, atmp, sCurPath As String
+  
+  #If VBA7 Then
+  
   Set dlgOpenFile = Application.FileDialog(3)
   With dlgOpenFile
     .Filters.Clear
@@ -51,12 +75,23 @@ Public Sub InstallReportTemplate()
   End With
   Set dlgOpenFile = Nothing
   
+  #Else
+  
+  
+   sFilePath = ahtCommonFileOpenSave( _
+                Filter:=ahtAddFilterItem("", "RTF шаблон", "*.rtf"), OpenFile:=True, _
+                DialogTitle:="Выберите шаблон", _
+                Flags:=ahtOFN_HIDEREADONLY)
+  
+  #End If
+
   sFileName = GetFile(sFilePath)
   sFileName = Mid(sFileName, 1, Len(sFileName) - Len(GetExt(sFileName)))
-  
+
   idReport = SelectOneValue("select id from t_rep where ucase(sCaption) = '" & sFileName & "'")
   If IsEmpty(idReport) Then
-    If UCase(Left(sFilePath, Len(CurrentProject.Path))) = UCase(CurrentProject.Path) Then sFilePath = "." & Mid(sFilePath, Len(CurrentProject.Path) + 1)
+    sCurPath = GetPath(CurrentDb.Name)
+    If UCase(Left(sFilePath, Len(sCurPath))) = UCase(sCurPath) Then sFilePath = "." & Mid(sFilePath, Len(sCurPath))
     CurrentDb().Execute "insert into t_rep (sCaption, sOrignTemplate) values ('" & Replace(sFileName, "'", "''") & "','" & Replace(sFilePath, "'", "''") & "');"
     idReport = SelectOneValue("select id from t_rep where ucase(sCaption) = '" & UCase(sFileName) & "'")
     atmp = GetTemplate(CLng(idReport))
@@ -66,6 +101,21 @@ Public Sub InstallReportTemplate()
   End If
 End Sub
 
+Private Function IsHasRepTable()
+'Проверка наличия в БД таблицы `t_rep`
+
+  Dim vTbl, vFld, vDB, rs
+  IsHasRepTable = True
+  Set vDB = CurrentDb()
+  On Error GoTo NoTable
+  Set vTbl = vDB.TableDefs("t_rep")
+  
+  On Error GoTo 0
+  Exit Function
+NoTable:
+  On Error GoTo 0
+  IsHasRepTable = False
+End Function
 
 
 Public Sub PrintReport(vReport, Optional ByRef dic As Object, Optional sFile As String = "")
@@ -91,14 +141,14 @@ Public Sub PrintReport(vReport, Optional ByRef dic As Object, Optional sFile As 
 
  If IsNumeric(vReport) Then
    If IsHasRepTable() Then
-     asTemplate = Report.GetTemplate(CLng(vReport))
+     asTemplate = KRNReport.GetTemplate(CLng(vReport))
    Else
      Err.Raise 1000, , "Не найден шаблон """ & vReport & """"
    End If
  Else
   
   sPathOrig = vReport
-  If Left(sPathOrig, 2) = ".\" Then sPathOrig = CurrentProject.Path & Mid(sPathOrig, 2)
+  If Left(sPathOrig, 2) = ".\" Then sPathOrig = GetPath(CurrentDb.Name) & Mid(sPathOrig, 3)
    
   sExtension = LCase(fso.GetExtensionName(sPathOrig))
    
@@ -113,7 +163,7 @@ Public Sub PrintReport(vReport, Optional ByRef dic As Object, Optional sFile As 
     If IsEmpty(i) Then
       Err.Raise 1000, , "Не найден шаблон """ & vReport & """"
     Else
-      asTemplate = Report.GetTemplate(CLng(i))
+      asTemplate = KRNReport.GetTemplate(CLng(i))
     End If
   End If
  End If
@@ -149,77 +199,22 @@ Public Sub PrintReport(vReport, Optional ByRef dic As Object, Optional sFile As 
  Set tf = fso.CreateTextFile(sFile)
  Dim svTemplate As String
  svTemplate = asTemplate(1)
- Report.MakeReport svTemplate, tf, dic
+ KRNReport.MakeReport svTemplate, tf, dic
  tf.Close
  Set tf = Nothing
  Set fso = Nothing
  
- If InSet(asTemplate(0), "rtf") Then Shell "winword """ & sFile & """", vbNormalFocus
- If InSet(asTemplate(0), "txt") Then Shell "notepad """ & sFile & """", vbNormalFocus
+ If InSet(asTemplate(0), "rtf") Then
+   CreateObject("WScript.Shell").Run "winword """ & sFile & """", vbNormalFocus
+ ElseIf InSet(asTemplate(0), "txt") Then
+   CreateObject("WScript.Shell").Run "notepad """ & sFile & """", vbNormalFocus
+ End If
  asTemplate = Array()
  
 End Sub
 
-Private Function IsHasRepTable()
-'Проверка наличия в БД таблицы `t_rep`
 
-  Dim vTbl, vFld, vDB
-  IsHasRepTable = True
-  Set vDB = CurrentDb()
-  On Error GoTo onCreate
-  Set vTbl = vDB.TableDefs("t_rep")
-  On Error GoTo 0
-  Exit Function
-onCreate:
-  On Error GoTo 0
-  IsHasRepTable = False
-End Function
-
-
-Function GetFilter(pParamName As String, pOperation As tOperationType, ParamArray pData())
-'Подготавливает операцию фильтра для применения в отчете
-'#param pParamName: Имя параметра фильтра
-'#param pOperation: Оператор фильтра
-' {*} opEQ (1) - равно
-' {*} opNEQ (2) - не равно
-' {*} opGR (4) - больше
-' {*} opLS (8) - меньше
-' {*} opNLS (16) - не меньше
-' {*} opNGR (32) - не больше
-' {*} opIN (128) - в списке, в `pData` можно передать массив значений или передать несколько значений
-' {*} opNIN (256) - не в списке, в `pData` можно передать массив значений или передать несколько значений
-' {*} opcont (512) - содержит
-' {*} opSTART (1024) - начинается
-' {*} opBTW (2048) - между, для всех значений **между** необходимо передать два операнда в качестве границ диапазонов. Если одна из границ - `NULL`, то граница не применяется
-' {*} opBTWWL (6144) - между без левого
-' {*} opBTWWR (10240) - между без правого
-' {*} opBTWWB (14336) - между без обоих
-' {*} opNCont (32768) - не содержит
-'#param pData: Один или несколько значений параметра фильтра
-
-
-  Dim i, tmp, vData
-  vData = pData
-  
-  If UBound(vData) = 0 Then If IsArray(vData(0)) Then vData = vData(0)
-  
-  i = UBound(vData) + 1
-  
-  tmp = Array()
-  ReDim tmp(i * 2 + 4)
-  
-  tmp(0) = pParamName & ".oper"
-  tmp(1) = pOperation
-
-  For i = 0 To UBound(vData)
-    tmp(i * 2 + 2) = pParamName & ".value" & IIf(i = 0, "", i)
-    tmp(i * 2 + 3) = vData(i)
-  Next
-GetFilter = tmp
-End Function
-
-
-Function BuildParam(pDic, ParamArray pData())
+Function BuildParam(pDic, ParamArray pdata())
 'Обновляет в контексте переменные
 '`BuildParam(pDic, Key, Value [, Key, Value])`
 '#param pDic: Текст
@@ -227,22 +222,20 @@ Function BuildParam(pDic, ParamArray pData())
 '#param Value: Значение переменной. Объекты должны быть завернуты в массив: `array(MyObject)`
 
   Dim i, tmp, vData
-  vData = pData
+  vData = pdata
   If UBound(vData) = 1 Then
     If IsNull(vData(0)) And IsArray(vData(1)) Then vData = vData(1)
   End If
   
   If pDic Is Nothing Then
-    Set BuildParam = CreateObject("Scripting.Dictionary")
-    BuildParam.CompareMode = 1
-  Else
-    Set BuildParam = pDic
+    Set pDic = CreateObject("Scripting.Dictionary")
+    pDic.CompareMode = 1
   End If
  
   i = LBound(vData)
   Do While i <= UBound(vData)
-    If IsArray(vData(i)) Then
-      BuildParam BuildParam, Null, vData(i)
+    If IsArray(vData) Then
+      BuildParam pDic, Null, vData(i)
       i = i + 1
     ElseIf i < UBound(vData) Then
       If IsNull(vData(0)) And IsArray(vData(1)) Then
@@ -256,6 +249,7 @@ Function BuildParam(pDic, ParamArray pData())
     End If
     
   Loop
+  Set BuildParam = pDic
 End Function
 
 
@@ -298,7 +292,25 @@ Function LPad(s As String, ch As String, TotalCnt As Integer) As String
  LPad = Right(LPad, TotalCnt)
 End Function
  
- 
+Function GetRegExp(spPattern As Variant) As Variant
+'Создает объект RegExpс заданным паттерном
+'param spPattern: Паттерн регулярного выражения. в начале могут быть дополнительные модификаторы:
+' {*} \g - Глолбальный поиск
+' {*} \i - Поиск без учета регистра
+' {*} \m - Символ переводла сроки заканичвает текущую строкуи начинает новую. Влияет на модификатор ^ и $
+  Dim svPattern: svPattern = spPattern: Set GetRegExp = CreateObject("VBScript.RegExp")
+  GetRegExp.Global = False: GetRegExp.IgnoreCase = False: GetRegExp.Multiline = False
+  Do While Left(svPattern, 1) = "\"
+    Select Case LCase(Mid(svPattern, 2, 1))
+      Case "g": GetRegExp.Global = True
+      Case "i": GetRegExp.IgnoreCase = True
+      Case "m": GetRegExp.Multiline = True
+      Case Else: Exit Do
+    End Select
+    svPattern = Mid(svPattern, 3)
+  Loop
+  GetRegExp.Pattern = svPattern
+End Function
  
 Private Function GetEscape(ByRef sBuf As String, ByRef iPOS As Long) As String
 'Внутренняя функция разбора RTF. Возвращает экрнаированное значение за символом `\`
@@ -615,6 +627,8 @@ Private Function InsertAddress(ts As String, adr As Long, iPOS As Long) As Strin
   InsertAddress = Mid(ts, 1, iPOS) & LPad(Hex(adr), "0", 8) & Mid(ts, iPOS + 9)
 End Function
 
+
+
 Public Function PrepareRTF(sFile As String) As String
 'Компилирует RTF файл в внутренний формат шаблона
 '#param sFile: Содержимое RTF файла
@@ -716,7 +730,7 @@ Public Function PrepareRTF(sFile As String) As String
 
    re.Pattern = "^\s*[_0-9а-яa-zё]+\s*\(.*\)$"
    
-   If Not re.test(Replace(sTXT, vbCrLf, "")) Then
+   If Not re.test(GetRegExp("\g[\r\n]+").Replace(sTXT, "")) Then
     'это не правильное поле оставляем его как есть
     If Trim(Mid(ts, CP, tp - CP)) <> "" Then Res = Res & "PRNT" & LPad(Hex(tp - CP), "0", 8) & Mid(ts, CP, tp - CP)
    Else
@@ -937,7 +951,7 @@ Public Function PrepareRTF(sFile As String) As String
  
 End Function
 
-Private Function ToBool(Value As Variant, Optional bRaise As Boolean = True) As Variant
+Private Function ToBool(value As Variant, Optional bRaise As Boolean = True) As Variant
 'Перобразнует значение в булевый формат и возвращет его значение
 '#param Value: Значение
 '#param bRaise: Что делать если значение не булево
@@ -946,13 +960,13 @@ Private Function ToBool(Value As Variant, Optional bRaise As Boolean = True) As 
 
  
  On Error GoTo NoBool
- ToBool = CBool(Value)
+ ToBool = CBool(value)
  Exit Function
 NoBool:
  ToBool = Empty
  If bRaise Then
    On Error GoTo 0
-   Err.Raise 1000, , "ToBool: значение {" & Value & "} не логического типа"
+   Err.Raise 1000, , "ToBool: значение {" & value & "} не логического типа"
  End If
 End Function
 
@@ -1037,15 +1051,15 @@ Else
  If Mid(Formula, StartPos, 1) = "(" Then 'Функция
   iArg = 0
   StartPos = StartPos + 1 'пропускаем (
-  Do While True 'Собираем аргументы
+  Do While StartPos <= Len(Formula) 'Собираем аргументы
    aArg(iArg) = GetValue(Formula, ParamList, StartPos)
    If Mid(Formula, StartPos, 1) = ")" Then
     StartPos = StartPos + 1
     Exit Do
    End If
    If IsNull(aArg(iArg)) Then Exit Do
-   iArg = iArg + 1 ' пропускаем точку с запятой
-   StartPos = StartPos + 1
+   iArg = iArg + 1
+   StartPos = StartPos + 1 ' пропускаем точку с запятой
   Loop
   
   Select Case LCase(sFnc)
@@ -1211,14 +1225,17 @@ Else
   GetValue = CDbl(sFnc)
   Exit Function
  Else
-  If ParamList.Exists(sFnc) Then 'Иначе считаем переменной и ищем в списке
-   GetValue = ParamList(sFnc)
-   Exit Function
+  If sFnc = "#" Then
+    'Вернет номер строки самого верхнего набора данных
+    GetValue = ParamList(ParamList("@SYS_CurrentRecordSet")(0) & ".rownum")
+  ElseIf ParamList.Exists(sFnc) Then 'Иначе считаем переменной и ищем в списке
+    GetValue = ParamList(sFnc)
+    Exit Function
   Else
-   On Error GoTo ParamNotFound
-   GetValue = Application.Eval(sFnc)
-   ParamList(sFnc) = GetValue
-   Exit Function
+    On Error GoTo ParamNotFound
+    GetValue = Application.Eval(sFnc)
+    ParamList(sFnc) = GetValue
+    Exit Function
 ParamNotFound:
    Err.Raise 1001, , "Параметр '" & sFnc & "' не найден в списке"
   End If
@@ -1243,7 +1260,7 @@ OnNoFunction:
 End Function
 
 
-Public Function GetTemplate(idReport As Long) As Variant()
+Public Function GetTemplate(idReport As Long) As Variant
 'Внутренняя функция для формирования отчета. Извлекает из хранилища шаблон по его коду.
 'Так же производится проверка, если исходный файл существует и его дата изменения больше чем у сохраненного шаблона, то шаблон будет обновлен.
 '#param idReport: Код шаблона
@@ -1262,12 +1279,12 @@ Public Function GetTemplate(idReport As Long) As Variant()
  If tRep.NoMatch Then Err.Raise 1000, , "Не найден шаблон с кодом " & idReport
  
  sPathOrig = tRep("sOrignTemplate")
- If Left(sPathOrig, 2) = ".\" Then sPathOrig = CurrentProject.Path & Mid(sPathOrig, 2)
+ If Left(sPathOrig, 2) = ".\" Then sPathOrig = GetPath(CurrentDb.Name) & Mid(sPathOrig, 3)
  sExtension = LCase(fso.GetExtensionName(sPathOrig))
   
  If fso.FileExists(sPathOrig) Then
    Set objF = fso.GetFile(sPathOrig)
-  
+  Debug.Print sPathOrig
    If Nz(tRep("dEditTemplate"), Now) <> objF.DateLastModified Then
      tRep.Edit
      Select Case LCase(sExtension)
@@ -1445,9 +1462,9 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
     PC = PC + iCnt + 7
    Case "GOTO"
 '<DOC>
-'`GOTO A[8]`
-'Делает безусловный прыжок по указанному адресу
-'- `A` - Новый адрес
+'GOTO J[8]
+'Безусловный прыжок по заранее известному адресу
+'- `J` - Новый адрес
     PC = CLng("&h" & Mid(ts, PC + 4, 8))
     
    Case "JUMP"
@@ -1494,12 +1511,17 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
     Else
      PC = PC + 15 + iCnt
     End If
+   Case "JMPI"
 '<DOC>
 '`ENDT`
-'Метка конца шаблона
+'Метка конца шаблона. При встрече с данной меткой обработка прервывается
    Case "ENDT"
-    Exit Do
-    
+   Exit Do
+'<DOC>
+'`NOOP`
+'Пустой блок
+   Case "NOOP"
+    PC = PC + 4
    Case "OPRS"
 '<DOC>
 '`OPRS I[3] N[I] J[4] S[J] E[8]`
@@ -1517,7 +1539,7 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
     sSQL = Trim(GetValue(Mid(ts, PC + iCnt + 11, iCnt2), dic, 1)) 'получаем текст из шаблона
     sSQL = FilterFmt(sSQL, dic) 'подставляем переменные
     
-    'Новый набор данных
+    'Новый набор данных (Имя набора, RecordSet, Родительский набор данных)
     aRecordSet = Array(sName, Empty, dic("@SYS_CurrentRecordSet"))
     
     On Error Resume Next
@@ -1574,6 +1596,9 @@ Public Function MakeReport(ts As String, ByRef OutStream As Variant, ByRef p_Dic
 'Переход к следующей записи внутри цикла
 '- `N` - Длина выражения
 '- `V` - Выражение, результатом которого должно быть имя набора данных. Если результат - пустая строка, то используется текущий набор данных
+
+'ToDo: Для единообразия перенести в CALC и использовать как функцию
+
     iCnt = CInt("&h" & Mid(ts, PC + 4, 3))
     sValue = Mid(ts, PC + 7, iCnt)
     PC = PC + iCnt + 7
@@ -1632,18 +1657,17 @@ Public Function FetchRow(ByRef pDic, Optional ByVal pCursorName As String = "")
       vRecordSet = vRecordSet(2)
     Loop
   End If
-  
   If Not vRecordSet.EOF Then
     For Each fld In vRecordSet.Fields
-      If IsObject(fld.Value) Then
-        If TypeName(fld.Value) = "Recordset2" Then
+      If IsObject(fld.value) Then
+        If TypeName(fld.value) = "Recordset2" Then
          
           Set tmpdic = CreateObject("Scripting.Dictionary")
           tmpdic.CompareMode = 1
           
-          Set vFiles = fld.Value
+          Set vFiles = fld.value
           While Not vFiles.EOF
-            tmpdic(vFiles.Fields("FileName").Value) = vFiles.Fields("FileData").Value
+            tmpdic(vFiles.Fields("FileName").value) = vFiles.Fields("FileData").value
             vFiles.MoveNext
           Wend
           vFiles.Close
@@ -1652,7 +1676,7 @@ Public Function FetchRow(ByRef pDic, Optional ByVal pCursorName As String = "")
           pDic(vCursorName & "." & fld.Name) = Array(tmpdic)
         End If
       Else
-        pDic(vCursorName & "." & fld.Name) = fld.Value
+        pDic(vCursorName & "." & fld.Name) = fld.value
       End If
     Next
     vRecordSet.MoveNext
@@ -1707,7 +1731,7 @@ Function GetTypeContent(ByRef tpData)
 ' {*} emf
 ' {*} wmf
 ' {*} не распознан - если не удалось определить формат изображения
-'#param p_Dic: Массив байт картинки
+'#param tpData: Массив байт картинки
 
   If IsNull(tpData) Then
     GetTypeContent = ""
@@ -1749,10 +1773,10 @@ Function FilterFmt(Text As String, ByRef p_Dic As Variant) As String
 'Подстановочные символы обрамляются символом `%`. Если нужно вывести символ как есть то его необходимо удвоить `%%`. Значение ключа ищется в словаре.
 'Если такого значения нет, то будет предпринята попытка получить значение через Eval
 '#param Text: Исходный тест с подстановками.
-'К подстановочному значению можно применить операции форматирования, для этого нужно после ключа через символ `;` указать способ форматирования.
+'К подстановочному значению можно применить операции форматирования, для этого нужно после ключа через символ `;` указать способ формтирования.
 'Доступные варианты форматирования:
-' {*} stdf:<имя_поля> - операция применения фильтра к полю заданному в формате. Имя фильтра берется из строки до `;`.
-' {*} sqldate:<значение_по_умолчанию> - Форматирует дату как SQL литерал. Если значение является Null, то берется `<значение_по_умолчанию>` как есть. Значение по умолчанию не обязательно и опускается вместе с символом `:`
+' {*} stdf:<имя_фильтра> - операция применения фильтра. см. отдельную справку по форматированию фильтров.
+' {*} sqldate:<значение_по_умолчанию> - Форматирует дату как SQL литерал. Если значение является Null, то берется <значение_по_умолчанию> как есть. Значение по умолчанию не обязательно и опускается вместе с символом `:`
 ' Специальный подстановочный имена полей
 ' {*} fnc<Имя_функции>:<Ключ в словаре> - Применение пользовательской функции для форматирования значения
 ' {*} get:<Выражение> - <Выражение> пропускается через функцию GetValue и подставляется значение
@@ -1807,94 +1831,102 @@ Function FilterFmt(Text As String, ByRef p_Dic As Variant) As String
     sKey = Trim(Mid(smid, 1, pt - 1))
     
     If LCase(Left(SFMT, 5)) = "stdf:" Then 'Формирование фильтра по полю
-     SFMT = Trim(Mid(SFMT, 6))
- 
-     If Not p_Dic.Exists(sKey & ".oper") Then idOperation = 0 Else idOperation = p_Dic(sKey & ".oper")
+     SFMT = Mid(SFMT, 6)
 
-     If idOperation = 0 Then 'Если операция не указана то ни чего не выводим
+     If Not p_Dic.Exists(sKey & ".oper") Or p_Dic(sKey & ".oper") = 0 Then 'Если операция не указана то ни чего не выводим
       smid = ""
      Else
-       If idOperation = opIN Or idOperation = opNIN Then 'In, Not in
+        idOperation = p_Dic(sKey & ".oper")
+        sPrefix = p_Dic(sKey & ".type") 'Базовый тип операнда
         
-         Dim sList As String, vValue As Variant, bEmptyList As booelan, i As Integer
+        If idOperation = opIN Or idOperation = opNIN Then 'In, Not in
+        
+         Dim sList As String
          sList = ""
-         bEmptyList = True
-         i = 0
+         Dim i As Integer
          Do While p_Dic.Exists(sKey & ".value" & IIf(i > 0, "" & i, ""))
-           bEmptyList = False
-           vValue = p_Dic(sKey & ".value" & IIf(i > 0, "" & i, ""))
-           If Not (IsNull(vValue) Or IsEmpty(vValue)) Then
-             If Len(sList) > 0 Then sList = sList & ","
-             sList = sList & ToSQL(vValue)
-           End If
+           If i > 0 Then sList = sList & ","
+           Select Case LCase(sPrefix)
+             Case "s"
+               sList = sList & "'" & GetRegExp("\g'").Replace(p_Dic(sKey & ".value" & IIf(i > 0, "" & i, "")), "''") & "'"
+             Case "d"
+               sList = sList & fncDateToSTR(p_Dic(sKey & ".value" & IIf(i > 0, "" & i, "")))
+             Case "n"
+               sList = sList & GetRegExp("\g,").Replace("" & p_Dic(sKey & ".value" & IIf(i > 0, "" & i, "")), ".")
+           End Select
          Loop
          
-         If sList = "" Then
-           'Пустой список - без условий, 'Если все значения Null, то условие всегда ложно
-           If bEmptyList Then smid = "" Else smid = "(1=0)"
-         Else
-           smid = " and " & IIf(idOperation = opNIN, "not ", "") & SFMT & " in ( " & sList & ")"
-         End If
+         smid = " and " & IIf(idOperation = opNIN, "not ", "") & " in ( " & sList & ")"
 
-       Else
+        Else
          sOperand = p_Dic(sKey & ".value") ' с чем сравниваем, значение параметра
-         If IsEmpty(sOperand) Then sOperand = Null
-                  
+         
+         If IsNull(sOperand) Then
+           sOperand = "(null)"
+         Else
+            Select Case sPrefix
+             Case "d"
+              sOperand = fncDateToSTR(sOperand)
+             Case "s"
+              sOperand = "'" & sOperand & "'"
+            End Select
+         End If
+         
          If (idOperation And opBTW) = opBTW Then '  для операторов between собираем второе значение
           sOperand2 = p_Dic(sKey & ".value1")
-          If IsEmpty(sOperand2) Then sOperand2 = Null
-
-          'Значение Null дает открытую границу
-          If Not IsNull(sOperand) Then smid = " and " & ToSQL(sOperand) & IIf((idOperation And 4096) = 0, " <= ", " < ") & SFMT
-          If Not IsNull(sOperand2) Then smid = smid & " and " & SFMT & IIf((idOperation And 8192) = 0, " <= ", " < ") & ToSQL(sOperand2)
+          
+          If IsNull(sOperand2) Then
+           sOperand2 = "(null)"
+          Else
+           Select Case sPrefix
+            Case "d"
+             sOperand2 = fncDateToSTR(sOperand2)
+            Case "s"
+             sOperand2 = "'" & GetRegExp("\g'").Replace(sOperand2, "''") & "'"
+           End Select
+          End If
+          
+          smid = " and " & sOperand & IIf((idOperation And 4096) = 0, " <= ", " < ") & SFMT
+          smid = smid & " and " & SFMT & IIf((idOperation And 8192) = 0, " <= ", " < ") & sOperand2
          Else
-          Dim sAnyCharPattern
           Select Case idOperation
            Case opEQ
-            If IsNull(sOperand) Then
-              smid = " and " & SFMT & " is NULL"
-            Else
-              smid = " and " & SFMT & " = " & ToSQL(sOperand)
-            End If
+            smid = " and " & SFMT & " = " & sOperand
            Case opNEQ
-            If IsNull(sOperand) Then
-              smid = " and not " & SFMT & " is NULL"
-            Else
-              smid = " and " & SFMT & " <> " & ToSQL(sOperand)
-            End If
+            smid = " and " & SFMT & " <> " & sOperand
            Case opGR
-            smid = " and " & SFMT & " > " & ToSQL(sOperand)
+            smid = " and " & SFMT & " > " & sOperand
            Case opLS
-            smid = " and " & SFMT & " < " & ToSQL(sOperand)
+            smid = " and " & SFMT & " < " & sOperand
            Case opNLS
-            smid = " and " & SFMT & " >= " & ToSQL(sOperand)
+            smid = " and " & SFMT & " >= " & sOperand
            Case opNGR
-            smid = " and " & SFMT & " <= " & ToSQL(sOperand)
+            smid = " and " & SFMT & " <= " & sOperand
            Case opcont
-            sAnyCharPattern = p_Dic("%")
-            smid = " and " & SFMT & " like '" & sAnyCharPattern & sOperand & sAnyCharPattern & "'"
+            smid = " and " & SFMT & " like '" & p_Dic("%") & Mid(sOperand, 2, Len(sOperand) - 2) & p_Dic("%") & "'"
            Case opSTART
-            smid = " and " & SFMT & " like '" & sOperand & p_Dic("%") & "'"
+            smid = " and " & SFMT & " like '" & Mid(sOperand, 2, Len(sOperand) - 2) & p_Dic("%") & "'"
            Case opNCont
-            sAnyCharPattern = p_Dic("%")
-            smid = " and not " & SFMT & " like '" & sAnyCharPattern & sOperand & sAnyCharPattern & "'"
+            smid = " and not " & SFMT & " like '" & p_Dic("%") & Mid(sOperand, 2, Len(sOperand) - 2) & p_Dic("%") & "'"
           End Select
          End If
-       End If
-     End If
+        End If
+      End If
     ElseIf Left(LCase(SFMT), 7) = "sqldate" Then
-     sOperand = p_Dic(sKey) ' с чем сравниваем, значение параметра
-     If IsEmpty(sOperand) Then sOperand = Null
-     If IsNull(sOperand) Then
-      i = InStr(SFMT, ":")
-      If i > 0 Then smid = ToSQL(CDate(Mid(SFMT, i + 1))) Else smid = "(null)"
+     SFMT = Split(SFMT, ":")
+     If IsNull(p_Dic(sKey)) Or IsEmpty(p_Dic(sKey)) Then
+      If UBound(SFMT) > 0 Then
+       smid = SFMT(1)
+      Else
+       smid = "(null)"
+      End If
      Else
-      smid = ToSQL(sOperand)
+      smid = fncDateToSTR(p_Dic(sKey))
      End If
     ElseIf LCase(Left(sKey, 3)) = "fnc" Then
      smid = Application.Run(sKey, p_Dic(SFMT))
     ElseIf LCase(sKey) = "get" Then
-     smid = Report.GetValue(SFMT & "", p_Dic, 1)
+     smid = KRNReport.GetValue(SFMT & "", p_Dic, 1)
     Else
      smid = Format(p_Dic(sKey), SFMT)
     End If
@@ -1964,14 +1996,26 @@ Function InSetInner(spKey As Variant, apArgs As Variant) As Boolean
 End Function
 
 
+Public Function fncDateToSTR(dDate) As String
+'Форматирует дату в литерал для использования в SQL запросе
+'#param dDate: Дата
+ If IsNull(dDate) Then
+   fncDateToSTR = "NULL"
+ Else
+   fncDateToSTR = "#" & Format(dDate, "mm\/dd\/yyyy hh:nn:ss") & "#"
+ End If
+End Function
+
+
+
 Public Function SelectOneValue(sql As String) As Variant
 'Выполняет запрос и значение из первой колонки первой строки
 '#param SQL: Текст запроса
  
  Dim rsdao
- Set rsdao = CurrentProject.Connection.Execute(sql)
+ Set rsdao = CurrentDb().OpenRecordset(sql)
  On Error GoTo noRecord
- If rsdao.EOF Then SelectOneValue = Empty Else SelectOneValue = rsdao.Fields(0).Value
+ If rsdao.EOF Then SelectOneValue = Empty Else SelectOneValue = rsdao.Fields(0).value
  rsdao.Close
  Set rsdao = Nothing
  Exit Function
@@ -1981,35 +2025,6 @@ noRecord:
  Set rsdao = Nothing
 End Function
 
-
-Public Function ToSQL(pValue)
-'Преобразует значение в SQL литерал
-'#param pValue: Значение, в зависисмости от типа будет разная форма литерала
-
-  Select Case VarType(pValue)
-    Case vbString
-      ToSQL = "'" & Replace(pValue, "'", "''") & "'"
-    Case vbDate
-      If pValue = CLng(pValue) Then
-        ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy") & "#"
-      ElseIf pValue < 1 Then
-        ToSQL = "#" & Format(pValue, "hh:nn:ss") & "#"
-      Else
-        ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy hh:nn:ss") & "#"
-      End If
-    Case vbEmpty, vbNull
-      ToSQL = "NULL"
-    Case vbBoolean
-      If pValue Then ToSQL = "true" Else ToSQL = "false"
-    Case vbInteger, vbLong, 20
-      ToSQL = pValue & ""
-    Case vbSingle, vbDouble, vbCurrency, vbDecimal
-      ToSQL = Replace(pValue & "", ",", ".")
-    'vbByte ?? char
-    Case Else
-      Err.rise 1001, , "Unsupported type of SQL value!"
-  End Select
-End Function
 
 'SUBBLOCK_BEGIN:BARCODE_COMMON
 'Общие функции для формирования штрихкодов в форматe EMF.
@@ -2032,8 +2047,8 @@ Function intToByte(i)
   intToByte = intToByte & Chr(ti Mod 256)
 End Function
 
-Function block(fnc, data)
-  block = intToByte(fnc) & data
+Function block(fnc, Data)
+  block = intToByte(fnc) & Data
   block = longToByte((Len(block) \ 2) + 2) & block
 End Function
 
@@ -2041,13 +2056,13 @@ Function Point(x, y)
   Point = intToByte(x) & intToByte(y)
 End Function
 
-Function color(r, g, b)
-  color = Chr(0) & Chr(b Mod 256) & Chr(g Mod 256) & Chr(r Mod 256)
+Function color(r, g, B)
+  color = Chr(0) & Chr(B Mod 256) & Chr(g Mod 256) & Chr(r Mod 256)
 End Function
 
-Function RectAsPoligon(ByRef objCount, l, t, r, b)
+Function RectAsPoligon(ByRef objCount, l, t, r, B)
   objCount = objCount + 1
-  RectAsPoligon = block(&H324, intToByte(4) & Point(l, b) & Point(l, t) & Point(r, t) & Point(r, b))
+  RectAsPoligon = block(&H324, intToByte(4) & Point(l, B) & Point(l, t) & Point(r, t) & Point(r, B))
 End Function
 
 Function CreatePenIndirect(ByRef objCount, PenStyle, pPoint, pColor)
@@ -2075,7 +2090,7 @@ Sub addInArray(ByRef spArray, ByRef pItem)
 End Sub
 
 Function zebra2wmf(s, xFactor, yFactor, ByRef MaxWidth)
-  Dim recs, objCount, i, l, largest, size
+  Dim recs, objCount, i, l, largest, Size
   recs = Empty
   objCount = 0
   addInArray recs, CreatePenIndirect(objCount, 0, Point(0, 0), color(255, 0, 0))
@@ -2106,12 +2121,12 @@ Function zebra2wmf(s, xFactor, yFactor, ByRef MaxWidth)
   For Each i In recs
     If Len(i) / 2 > largest Then largest = Len(i) / 2
   Next
-  size = Len(zebra2wmf) / 2 + 9
+  Size = Len(zebra2wmf) / 2 + 9
   zebra2wmf = intToByte(1) & _
      intToByte(9) & _
      intToByte(&H100) & _
-     intToByte(size Mod &H10000) & _
-     intToByte(size \ &H10000) & _
+     intToByte(Size Mod &H10000) & _
+     intToByte(Size \ &H10000) & _
      intToByte(UBound(recs)) & _
      longToByte(largest) & _
      intToByte(0) & zebra2wmf
@@ -2399,3 +2414,8 @@ EAN13_Err:
 End Function
 
 'SUBBLOCK_END
+
+
+
+
+

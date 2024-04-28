@@ -84,7 +84,7 @@ Private Declare Function CreateEnhMetaFile Lib "gdi32" Alias "CreateEnhMetaFileW
 Private Declare Function CloseEnhMetaFile Lib "gdi32" (ByVal hDC As LongPtr) As LongPtr
 Private Declare Function GetStockObject Lib "gdi32" (ByVal nIndex As Long) As Long
 Private Declare Function OleCreatePictureIndirect Lib "oleaut32" (lpPictDesc As PICTDESC, riid As Any, ByVal fPictureOwnsHandle As Long, lpvObj As IPicture) As Long
-Private Declare Function FillRect Lib "user32" (ByVal hDC As LongPtr, lpRect As RECT, ByVal hBrush As LongPtr) As Long
+Private Declare Function FillRect Lib "user32" (ByVal hDC As LongPtr, lpRect As rect, ByVal hBrush As LongPtr) As Long
 Private Declare Function CreateSolidBrush Lib "gdi32" (ByVal crColor As Long) As LongPtr
 Private Declare Function DeleteObject Lib "gdi32" (ByVal hObject As LongPtr) As Long
 Private Declare Function WideCharToMultiByte Lib "kernel32" (ByVal CodePage As Long, ByVal dwFlags As Long, ByVal lpWideCharStr As LongPtr, ByVal cchWideChar As Long, lpMultiByteStr As Any, ByVal cchMultiByte As LongPtr, ByVal lpDefaultChar As LongPtr, ByVal lpUsedDefaultChar As LongPtr) As Long
@@ -95,7 +95,7 @@ Private Declare Function CreateCompatibleDC Lib "gdi32" (ByVal hDC As LongPtr) A
 Private Declare Function DeleteDC Lib "gdi32" (ByVal hDC As LongPtr) As Long
 Private Declare Function CreateDIBSection Lib "gdi32" (ByVal hDC As LongPtr, lpBitsInfo As Any, ByVal wUsage As Long, lpBits As LongPtr, ByVal hSection As LongPtr, ByVal dwOffset As Long) As LongPtr
 Private Declare Function SetStretchBltMode Lib "gdi32" (ByVal hDC As LongPtr, ByVal nStretchMode As Long) As Long
-Private Declare Function StretchBlt Lib "gdi32" (ByVal hDC As LongPtr, ByVal X As Long, ByVal Y As Long, ByVal nWidth As Long, ByVal nHeight As Long, ByVal hdcSrc As LongPtr, ByVal xSrc As Long, ByVal ySrc As Long, ByVal nSrcWidth As Long, ByVal nSrcHeight As Long, ByVal dwRop As Long) As Long
+Private Declare Function StretchBlt Lib "gdi32" (ByVal hDC As LongPtr, ByVal x As Long, ByVal y As Long, ByVal nWidth As Long, ByVal nHeight As Long, ByVal hdcSrc As LongPtr, ByVal xSrc As Long, ByVal ySrc As Long, ByVal nSrcWidth As Long, ByVal nSrcHeight As Long, ByVal dwRop As Long) As Long
 Private Declare Function GetDeviceCaps Lib "gdi32" (ByVal hDC As LongPtr, ByVal nIndex As Long) As Long
 Private Declare Function PolyPolygon Lib "gdi32" (ByVal hDC As LongPtr, lpPoint As Any, lpPolyCounts As Any, ByVal nCount As Long) As Long
 Private Declare Function SetMapMode Lib "gdi32" (ByVal hCD As LongPtr, ByVal nMapMode As Long) As Long
@@ -483,8 +483,8 @@ QH:
     QRCodegenConvertToData = baOutput
 End Function
 
-Private Function HM2Pix(ByVal Value As Double, ByVal lDpi As Long) As Long
-    HM2Pix = Int(Value * lDpi / 2540 + 0.5)
+Private Function HM2Pix(ByVal value As Double, ByVal lDpi As Long) As Long
+    HM2Pix = Int(value * lDpi / 2540 + 0.5)
 End Function
 
 Public Function QRCodegenResizePicture(pPicture As IPicture, ByVal NewWidth As Long, ByVal NewHeight As Long) As StdPicture
@@ -1787,10 +1787,10 @@ Function PointToWMF(baQrCode() As Byte) As String
   Dim recs() As Variant, objCount As Long, i As Variant, largest As Long, Size As Long
   recs = Array()
   objCount = 0
-  addInArray recs, Report.CreatePenIndirect(objCount, 0, Point(0, 0), color(255, 0, 0))
-  addInArray recs, Report.SelectObject(objCount - 1)
-  addInArray recs, Report.CreateBrushIndirect(objCount, 0, color(0, 0, 0), 4)
-  addInArray recs, Report.SelectObject(objCount - 1)
+  addInArray recs, KRNReport.CreatePenIndirect(objCount, 0, Point(0, 0), color(255, 0, 0))
+  addInArray recs, KRNReport.SelectObject(objCount - 1)
+  addInArray recs, KRNReport.CreateBrushIndirect(objCount, 0, color(0, 0, 0), 4)
+  addInArray recs, KRNReport.SelectObject(objCount - 1)
   
   Dim factor As Long: factor = 10
   
@@ -1815,12 +1815,12 @@ Function PointToWMF(baQrCode() As Byte) As String
         
         If lX1 - lX > lY1 - lY Then
           'Горизонтальная линия
-          Report.addInArray recs, Report.rect(objCount, lX * factor, (lY + 1) * factor, (lX1 + 1) * factor, lY * factor)
+          KRNReport.addInArray recs, KRNReport.RectAsPoligon(objCount, lX * factor, (lY + 1) * factor, (lX1 + 1) * factor, lY * factor)
           For lI = lX To lX1
             Call pvSetModuleBounded(baQrCode, lI, lY, False)
           Next
         Else
-          Report.addInArray recs, Report.rect(objCount, lX * factor, (lY1 + 1) * factor, (lX + 1) * factor, lY * factor)
+          KRNReport.addInArray recs, KRNReport.RectAsPoligon(objCount, lX * factor, (lY1 + 1) * factor, (lX + 1) * factor, lY * factor)
           'Вертикальная линия
           For lI = lY To lY1
             Call pvSetModuleBounded(baQrCode, lX, lI, False)
@@ -1829,7 +1829,7 @@ Function PointToWMF(baQrCode() As Byte) As String
       End If
     Next
   Next
-  Report.addInArray recs, block(0, Empty) 'EOF
+  KRNReport.addInArray recs, block(0, Empty) 'EOF
   PointToWMF = Join(recs, "")
   largest = 0
   For Each i In recs

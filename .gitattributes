@@ -1,0 +1,4 @@
+*.vb working-tree-encoding=CP1251 eol=CRLF
+*.bas working-tree-encoding=CP1251 eol=CRLF
+*.ahk working-tree-encoding=CP1251 eol=CRLF
+*.vbs working-tree-encoding=CP1251 eol=CRLF
