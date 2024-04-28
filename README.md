@@ -38,7 +38,7 @@ flowchart LR
 ```
 # Каталог примеров
 
-[Пример "быстрый старт"](./QuickStart.md)
+[Пример "быстрый старт"](./examples/QickStart/QuickStart.md)
 
 
 # <a id="install"></a> Установка
