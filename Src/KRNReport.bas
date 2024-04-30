@@ -4,46 +4,24 @@ Option Explicit
  
 ' Модуль генерации отчетов в формате RTF из шаблона
 ' Версия 1.1. 2022 год
-' Больше информации на странице https://github.com/VASilaev/rtfreport
+' Больше информации на странице https://github.com/VASilaev/rtfreport/wiki
  
-#If VBA7 Then
-   Public Enum tOperationType
-      opEQ = 1 ' равно
-      opNEQ = 2 ' не равно
-      opGR = 4 ' больше
-      opLS = 8 ' меньше
-      opNLS = 16 ' не меньше
-      opNGR = 32 ' не больше
-      opIN = 128 ' в списке
-      opNIN = 256 ' не в списке
-      opcont = 512 ' содержит
-      opSTART = 1024 ' начинается
-      opBTW = 2048 ' между
-      opBTWWL = 6144 ' между без левого
-      opBTWWR = 10240 ' между без правого
-      opBTWWB = 14336 ' между без обоих
-      opNCont = 32768 ' не содержит
-    End Enum
- 
-#Else
-    Public Const opEQ = 1 ' равно
-    Public Const opNEQ = 2 ' не равно
-    Public Const opGR = 4 ' больше
-    Public Const opLS = 8 ' меньше
-    Public Const opNLS = 16 ' не меньше
-    Public Const opNGR = 32 ' не больше
-    Public Const opIN = 128 ' в списке
-    Public Const opNIN = 256 ' не в списке
-    Public Const opcont = 512 ' содержит
-    Public Const opSTART = 1024 ' начинается
-    Public Const opBTW = 2048 ' между
-    Public Const opBTWWL = 6144 ' между без левого
-    Public Const opBTWWR = 10240 ' между без правого
-    Public Const opBTWWB = 14336 ' между без обоих
-    Public Const opNCont = 32768 ' не содержит
 
-#End If
-
+Public Const opEQ = 1 ' равно
+Public Const opNEQ = 2 ' не равно
+Public Const opGR = 4 ' больше
+Public Const opLS = 8 ' меньше
+Public Const opNLS = 16 ' не меньше
+Public Const opNGR = 32 ' не больше
+Public Const opIN = 128 ' в списке
+Public Const opNIN = 256 ' не в списке
+Public Const opcont = 512 ' содержит
+Public Const opSTART = 1024 ' начинается
+Public Const opBTW = 2048 ' между
+Public Const opBTWWL = 6144 ' между без левого
+Public Const opBTWWR = 10240 ' между без правого
+Public Const opBTWWB = 14336 ' между без обоих
+Public Const opNCont = 32768 ' не содержит
 Const cReportTable = "t_rep"
 
 Public Sub InstallRepSystem()
