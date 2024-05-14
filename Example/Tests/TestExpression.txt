@@ -1,0 +1,23 @@
+Description = Самотестироавание
+Expected=&1
+Actual=%cLng(1)
+@AssertEquals
+
+
+Expected=!1,0
+Actual=%cdbl(1)
+@AssertEquals
+
+
+Expected=#01.12.2024 20:21:22
+Actual=%cDate("01.12.2024 20:21:22")
+@AssertEquals
+
+
+Actual=$txt$Это длинный текст
+Продолжение текста с новой строки
+$txt$
+Expected=&52
+Actual=%Len(Actual)
+@AssertEquals
+

@@ -1,4 +1,3 @@
-Attribute VB_Name = "mdQRCodegen"
 '=========================================================================
 '
 ' QR Code generator library (VB6/VBA)
@@ -483,8 +482,8 @@ QH:
     QRCodegenConvertToData = baOutput
 End Function
 
-Private Function HM2Pix(ByVal value As Double, ByVal lDpi As Long) As Long
-    HM2Pix = Int(value * lDpi / 2540 + 0.5)
+Private Function HM2Pix(ByVal Value As Double, ByVal lDpi As Long) As Long
+    HM2Pix = Int(Value * lDpi / 2540 + 0.5)
 End Function
 
 Public Function QRCodegenResizePicture(pPicture As IPicture, ByVal NewWidth As Long, ByVal NewHeight As Long) As StdPicture
@@ -1390,7 +1389,7 @@ Private Function pvToUtf8Array(sText As String) As Byte()
     pvToUtf8Array = baRetVal
 End Function
 
-Private Function DispCallByVtbl(pUnk As stdole.IUnknown, ByVal lIndex As Long, ParamArray A() As Variant) As Variant
+Private Function DispCallByVtbl(pUnk As stdole.IUnknown, ByVal lIndex As Long, ParamArray a() As Variant) As Variant
     Const CC_STDCALL    As Long = 4
 #If Win64 Then
     Const PTR_SIZE      As Long = 8
@@ -1403,7 +1402,7 @@ Private Function DispCallByVtbl(pUnk As stdole.IUnknown, ByVal lIndex As Long, P
     Dim vPtr(0 To 63)   As LongPtr
     Dim hResult         As Long
     
-    vParam = A
+    vParam = a
     For lIdx = 0 To UBound(vParam)
         vType(lIdx) = VarType(vParam(lIdx))
         vPtr(lIdx) = VarPtr(vParam(lIdx))

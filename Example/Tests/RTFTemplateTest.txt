@@ -1,0 +1,90 @@
+'''''''''''''''''''''''''''''''
+Description = Общий тест Scan
+
+
+RTF  =rawТекст до скана{\field {\*\fldinst {scan("a" for "digits")}}{}} {\field {\*\fldinst {f(a.id)}}{}} {\field {\*\fldinst {endscan()}}{}}Текст после скана
+Expected = GOTO00000015        PRNT0000000EТекст до сканаOPRS003"a"0008"digits"0000007EPRNT00000001{PRVL004a.idPRNT00000001}NEXT0000004DPRNT00000011Текст после сканаENDT
+Actual = %PrepareRTF(rtf)
+@AssertEquals
+
+Expected = Текст до скана{0}{1}{2}{3}{4}{5}{6}{7}{8}{9}Текст после скана
+Actual = %MakeReport(Actual)
+@AssertEquals
+
+'''''''''''''''''''''''''''''''
+Description = Проверка блок scanEntry в scan
+
+
+RTF =rawТекст до скана{\field {\*\fldinst {scan("a" for "digits")}}{}}Этот текст будет выведен только на первой строке{\field {\*\fldinst {scanEntry()}}{}} {\field {\*\fldinst {f(a.id)}}{}} {\field {\*\fldinst {endscan()}}{}}Текст после скана
+Expected = GOTO00000015        PRNT0000000EТекст до сканаOPRS003"a"0008"digits"000000BAPRNT00000030Этот текст будет выведен только на первой строкеPRNT00000001{PRVL004a.idPRNT00000001}NEXT00000089PRNT00000011Текст после сканаENDT
+Actual = %PrepareRTF(rtf)
+@AssertEquals
+
+Expected = Текст до сканаЭтот текст будет выведен только на первой строке{0}{1}{2}{3}{4}{5}{6}{7}{8}{9}Текст после скана
+Actual = %MakeReport(Actual)
+@AssertEquals
+
+
+'''''''''''''''''''''''''''''''
+Description = Проверка блок scanfooter в scan
+
+
+RTF =rawТекст до скана{\field {\*\fldinst {scan("a" for "digits")}}{}}{\field {\*\fldinst {f(a.id)}}{}} {\field {\*\fldinst {scanfooter()}}{}}  Footer{\field {\*\fldinst {endscan()}}{}}  Текст после скана 
+Expected= GOTO00000015        PRNT0000000EТекст до сканаOPRS003"a"0008"digits"00000092PRNT00000001{PRVL004a.idPRNT00000001}NEXT0000004DPRNT00000008  FooterPRNT00000014  Текст после скана ENDT
+Actual = %PrepareRTF(rtf)
+@AssertEquals
+
+Expected = Текст до скана{0}{1}{2}{3}{4}{5}{6}{7}{8}{9}  Footer  Текст после скана 
+Actual = %MakeReport(Actual)
+@AssertEquals
+
+
+'''''''''''''''''''''''''''''''
+Description = Одновременоое появлние блоков scanEntry и scanfooter в scan
+
+RTF =rawТекст до скана{\field {\*\fldinst {scan("a" for "digits")}}{}}  Entry{\field {\*\fldinst {scanEntry()}}{}} {\field {\*\fldinst {f(a.id)}}{}} {\field {\*\fldinst {scanfooter()}}{}}  Footer{\field {\*\fldinst {endscan()}}{}}  Текст после скана
+Expected=GOTO00000015        PRNT0000000EТекст до сканаOPRS003"a"0008"digits"000000A5PRNT00000007  EntryPRNT00000001{PRVL004a.idPRNT00000001}NEXT00000060PRNT00000008  FooterPRNT00000013  Текст после сканаENDT
+Actual = %PrepareRTF(rtf)
+@AssertEquals
+
+Expected = Текст до скана  Entry{0}{1}{2}{3}{4}{5}{6}{7}{8}{9}  Footer  Текст после скана
+Actual = %MakeReport(Actual)
+@AssertEquals
+
+
+
+
+'''''''''''''''''''''''''''''''
+Description = Пустой Скан
+
+
+rtf = rawТекст до скана{\field {\*\fldinst {scan("a" for "select * from digits where 1 = 0")}}{}}  Entry{\field {\*\fldinst {scanEntry()}}{}} {\field {\*\fldinst {f(a.id)}}{}} {\field {\*\fldinst {scanfooter()}}{}}  Footer{\field {\*\fldinst {endscan()}}{}}  Текст после скана
+Expected=GOTO00000015        PRNT0000000EТекст до сканаOPRS003"a"0022"select * from digits where 1 = 0"000000BFPRNT00000007  EntryPRNT00000001{PRVL004a.idPRNT00000001}NEXT0000007APRNT00000008  FooterPRNT00000013  Текст после сканаENDT
+Actual = %PrepareRTF(rtf)
+@AssertEquals
+
+Expected=Текст до скана  Текст после скана
+Actual = %MakeReport(Actual)
+@AssertEquals
+
+
+'''''''''''''''''''''''''''''''
+Description = Проверка блока IF
+
+
+rtf=rawbefore {\field {\*\fldinst {if(1=0)}}{}}if block{\field {\*\fldinst {endif()}}{}} after
+Expected=GOTO00000015        PRNT00000007before JMPF0031=00000004EPRNT00000008if blockPRNT00000006 afterENDT
+Actual = %PrepareRTF(rtf)
+@AssertEquals
+
+rtf=rawbefore {\field {\*\fldinst {if(1=0)}}{}}then block{\field {\*\fldinst {else()}}{}}else block{\field {\*\fldinst {endif()}}{}} after
+Expected=GOTO00000015        PRNT00000007before JMPF0031=00000005CPRNT0000000Athen blockGOTO00000072PRNT0000000Aelse blockPRNT00000006 afterENDT
+Actual = %PrepareRTF(rtf)
+@AssertEquals
+
+
+rtf=rawbefore {\field {\*\fldinst {if(1=0)}}{}}then block{\field {\*\fldinst {elif(1=0)}}{}}elif1 block{\field {\*\fldinst {else()}}{}}else block{\field {\*\fldinst {endif()}}{}} after
+Expected=GOTO00000015        PRNT00000007before JMPF0031=00000005CPRNT0000000Athen blockGOTO000000A7JMPF0031=000000091PRNT0000000Belif1 blockGOTO000000A7PRNT0000000Aelse blockPRNT00000006 afterENDT
+Actual = %PrepareRTF(rtf)
+@AssertEquals
+

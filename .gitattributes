@@ -2,3 +2,5 @@
 *.bas working-tree-encoding=CP1251 eol=CRLF
 *.ahk working-tree-encoding=CP1251 eol=CRLF
 *.vbs working-tree-encoding=CP1251 eol=CRLF
+*.txt working-tree-encoding=CP1251 eol=CRLF
+*.bat working-tree-encoding=CP1251 eol=CRLF
