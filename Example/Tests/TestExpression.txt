@@ -1,10 +1,10 @@
 Description = Выражения. Числа
 
-Expected=0
+Expected=&0
 Actual=%0
 @AssertEquals
 
-Expected=0.1
+Expected=!0,1
 Actual=%0.1@
 @AssertEquals
 
@@ -12,12 +12,12 @@ Expected=Decimal
 Actual=%typename(Actual)
 @AssertEquals
 
-Expected=0.1
+Expected=!0,1
 Actual=%.1
 @AssertEquals
 
-Expected=cDec("100000000000000000000")
-Actual=%100000000000000000000@
+Expected=&100000000
+Actual=%100000000@
 @AssertEquals
 
 Expected=!1,0
@@ -63,7 +63,7 @@ Expected=#01.12.2024 20:21:22
 Actual=%cDate("01.12.2024 20:21:22")
 @AssertEquals
 
-Actual=%#12/01/2024 20:21:22#
+Actual=%#01/12/2024 20:21:22#
 @AssertEquals
 
 

@@ -3,22 +3,23 @@ Option Explicit
 
 Private Function ResolvePath(ObjFSO As Object, ByVal sBasePath As String, ByVal sFileName As String)
 'Вычисляет абсолютный путь от относительного
-
+  Dim svBase As String
   ResolvePath = sFileName
+  svBase = sBasePath
   If Left(ResolvePath, 2) = ".\" Then
     ResolvePath = Mid(ResolvePath, 3)
     Do While Left(ResolvePath, 3) = "..\"
       ResolvePath = Mid(ResolvePath, 4)
-      sBasePath = ObjFSO.GetParentFolderName(sBasePath)
+      svBase = ObjFSO.GetParentFolderName(svBase)
     Loop
-    ResolvePath = ObjFSO.buildpath(sBasePath, ResolvePath)
+    ResolvePath = ObjFSO.buildpath(svBase, ResolvePath)
   End If
 End Function
 
 Public Function TestClearError(tContext As Object)
 'Удаляет из котекста сообщение об ошибке
   tContext("ErrorLevel") = 0
-  tContext("ErrorMessage") = ""
+  tContext("ErrorMessage") = vbNullString
   TestClearError = True
 End Function
 
@@ -57,6 +58,7 @@ End Function
 Public Function ApplicationQuit(tContext As Object)
 'Компилирует и сохраняет все модули. (не работает если есть ошибки)
   Application.Quit tContext("Save")
+  ApplicationQuit = True
 End Function
 
 Public Function ImportForm(tContext As Object) As Boolean
@@ -110,10 +112,10 @@ nLine = 0
 Dim bOnErrorResume As Boolean
 bOnErrorResume = False
 
-Dim nCurrentIndent, nSkipIndent
+Dim nCurrentIndent ', nSkipIndent
 Dim i As Long, vValue, sVarName
 
-nSkipIndent = 0
+'nSkipIndent = 0
 
 Do While Not tf.AtEndOfStream
   Dim sLine
@@ -126,8 +128,8 @@ Do While Not tf.AtEndOfStream
   
 mProcessLine:
 
-  If Left(sLine, 1) = "'" Or Trim(sLine) = "" Then
-    'Ни чего не делаем комментарий или пустая строка
+  If Left(sLine, 1) = "'" Or Trim(sLine) = vbNullString Then
+    nLine = nLine 'Ни чего не делаем комментарий или пустая строка
   ElseIf Left(sLine, 1) = "@" Then
     'Выполнить действие
     If bOnErrorResume Then
@@ -174,7 +176,7 @@ mProcessLine:
           End If
           tContext(sVarName) = GetExpression(vValue, tContext, 2)
           If bOnErrorResume Then
-            If Err Then
+            If Err.Number <> 0 Then
               tContext("ErrorLevel") = Err.Number
               tContext("ErrorMessage") = "[" & Err.Number & "] " & Err.Description
               Err.Clear
@@ -205,11 +207,6 @@ mProcessLine:
 Loop
 
 If Not IsEmpty(sCurrentFile) Then tContext("sCurrentFileName") = sCurrentFile Else tContext.Remove ("sCurrentFileName")
-
-Exit Sub
-OnError:
-  Debug.Print nLine & ":" & Err.Description
-  Resume Next
 
 End Sub
 
@@ -279,9 +276,7 @@ Public Function InitializeScripterContext(Optional tContext As Object = Nothing)
     tContext.CompareMode = 1
   End If
 
-  Dim fso, sFile
-  Set fso = CreateObject("scripting.FileSystemObject")
-  tContext.Add "FileSystemObject", fso
+  tContext.Add "FileSystemObject", CreateObject("scripting.FileSystemObject")
     
   Set InitializeScripterContext = tContext
 End Function
@@ -293,7 +288,7 @@ Public Function InitializeTestContext(Optional tContext As Object = Nothing)
     tContext.CompareMode = 1
   End If
   tContext.Add "Description", "Без описания"
-  tContext.Add "PrevDescription", ""
+  tContext.Add "PrevDescription", vbNullString
   tContext.Add "OutputMessage", New Collection
   tContext.Add "CountFailures ", 0
   tContext.Add "CountRuns", 0
@@ -315,7 +310,7 @@ Public Function RunFileFromEnv()
 'Платежи.accdb /nostartup /x RunFileFromEnv
 '```
   RunScriptFile CreateObject("WScript.Shell").ExpandEnvironmentStrings("%SCRIPT_FILE%")
-  
+  RunFileFromEnv = True
 End Function
 
 Public Function RunScriptFile(sFileName)
@@ -327,6 +322,7 @@ Public Function RunScriptFile(sFileName)
   If tContext.exists("nExitWithCode") Then nExitWithCode = tContext("nExitWithCode") Else
   tContext.RemoveAll
   If Not IsEmpty(nExitWithCode) Then Application.Quit nExitWithCode
+  RunScriptFile = True
 End Function
 
 Public Sub RunAllTest()

@@ -8,6 +8,7 @@
 ' Copyright (c) wqweto@gmail.com (MIT License)
 '
 '=========================================================================
+'@NoIndent
 Option Explicit
 DefObj A-Z
 
@@ -947,9 +948,9 @@ Private Sub pvInitializeFunctionModules(ByVal lVersion As Long, baQrCode() As By
     lNumAlign = pvGetAlignmentPatternPositions(lVersion, baAlignPatPos)
     For lIdx = 0 To lNumAlign - 1
         For lJdx = 0 To lNumAlign - 1
-            If (lIdx = 0 And lJdx = 0) Or (lIdx = 0 And lJdx = lNumAlign - 1) Or (lIdx = lNumAlign - 1 And lJdx = 0) Then
+            If (lIdx = 0 And lJdx = 0) Or (lIdx = 0 And lJdx = lNumAlign - 1) And (lIdx = lNumAlign - 1 And lJdx = 0) Then
                 '--- Don't draw on the three finder corners
-            Else
+            
                 pvFillRectangle baAlignPatPos(lIdx) - 2, baAlignPatPos(lJdx) - 2, 5, 5, baQrCode
             End If
         Next
@@ -999,9 +1000,7 @@ Private Sub pvDrawLightFunctionModules(ByVal lVersion As Long, baQrCode() As Byt
     lNumAlign = pvGetAlignmentPatternPositions(lVersion, baAlignPatPos)
     For lIdx = 0 To lNumAlign - 1
         For lJdx = 0 To lNumAlign - 1
-            If (lIdx = 0 And lJdx = 0) Or (lIdx = 0 And lJdx = lNumAlign - 1) Or (lIdx = lNumAlign - 1 And lJdx = 0) Then
-                '--- Don't draw on the three finder corners
-            Else
+            If Not ((lIdx = 0 And lJdx = 0) Or (lIdx = 0 And lJdx = lNumAlign - 1) Or (lIdx = lNumAlign - 1 And lJdx = 0)) Then
                 For lDy = -1 To 1
                     For lDx = -1 To 1
                         bIsDark = (lDx = 0 And lDy = 0)
@@ -1829,7 +1828,7 @@ Function PointToWMF(baQrCode() As Byte) As String
     Next
   Next
   KRNReport.addInArray recs, block(0, Empty) 'EOF
-  PointToWMF = Join(recs, "")
+  PointToWMF = Join(recs, vbNullString)
   largest = 0
   For Each i In recs
     If Len(i) / 2 > largest Then largest = Len(i) / 2
@@ -1848,7 +1847,7 @@ End Function
 
 
 Public Function qrcode(pParamList, aArg As Variant) As String
-  If aArg(0) <> "" Then
+  If aArg(0) <> vbNullString Then
     Dim baQrCode()      As Byte
     If QRCodegenEncode(aArg(0), baQrCode, QRCodegenEcc_LOW, 1, 40, QRCodegenMask_AUTO, True) Then
       baQrCode = StrConv(PointToWMF(baQrCode), vbFromUnicode)

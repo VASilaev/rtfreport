@@ -1,6 +1,7 @@
 Option Compare Text
 Option Explicit
- 
+'@Ignore ProcedureNotUsed
+
 ' Модуль генерации отчетов в формате RTF из шаблона
 ' Версия 1.1. 2022 год
 ' Больше информации на странице https://github.com/VASilaev/rtfreport
@@ -8,7 +9,7 @@ Option Explicit
 Const cReportTable As String = "t_rep"
 Const StopSym As String = "(;,+-*/&^%<>= )"
 
-Dim GlobalContext As Object
+Private GlobalContext As Object
 
 Public Sub InstallRepSystem()
   'Создает необходимые таблицы. Для хранения шаблонов внутри таблицы
@@ -23,6 +24,7 @@ Public Sub InstallRepSystem()
   End If
 End Sub
 
+'@EntryPoint
 Public Sub InstallReportTemplate()
   'Добавляет файл в хранилище шаблонов, после чего сам файл можно удалить, а шаблон вызывать по коду или имени
   InstallRepSystem
@@ -48,7 +50,7 @@ Public Sub InstallReportTemplate()
   
   
     sFilePath = ahtCommonFileOpenSave( _
-                Filter:=ahtAddFilterItem("", "RTF шаблон", "*.rtf"), OpenFile:=True, _
+                Filter:=ahtAddFilterItem(vbNullString, "RTF шаблон", "*.rtf"), OpenFile:=True, _
                 DialogTitle:="Выберите шаблон", _
                 Flags:=ahtOFN_HIDEREADONLY)
   
@@ -85,7 +87,7 @@ NoTable:
   IsHasRepTable = False
 End Function
 
-Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFile As String = "", Optional bPrint As Boolean = False)
+Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFile As String = vbNullString, Optional bPrint As Boolean = False)
   'Запускает формирование документа из шаблона
   '#param vReport: Идентификатор шаблона.
   'Если число, то ищется в таблице с сохраненными отчетами, в противном случае считается что это имя файла.
@@ -97,7 +99,7 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
 
   Dim fso
   Dim tf                                         'As TextStream
-  Dim asTemplate, tValue, i As Integer
+  Dim asTemplate, i As Integer
   Dim sPathOrig As String, sExtension As String
 
   Set fso = CreateObject("scripting.FileSystemObject")
@@ -142,7 +144,7 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
   dic("Date") = Date
   dic("Now") = Now
   
-  If sFile = "" Then
+  If sFile = vbNullString Then
     On Error Resume Next
     For i = 0 To 1000
       sFile = fso.GetSpecialFolder(2) & "\tmp_" & i & "." & asTemplate(0)
@@ -183,8 +185,6 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
   ElseIf InSet(asTemplate(0), "txt") Then
     CreateObject("WScript.Shell").Run "notepad """ & sFile & """", vbNormalFocus
   End If
-  asTemplate = Array()
- 
 End Sub
 
 Function BuildParam(ByRef pDic As Object, ParamArray pdata())
@@ -214,7 +214,7 @@ Function BuildParam(ByRef pDic As Object, ParamArray pdata())
       If IsNull(vData(0)) And IsArray(vData(1)) Then
         BuildParam pDic, Null, vData(i + 1)
       Else
-        pDic(vData(i) & "") = vData(i + 1)
+        pDic(vData(i) & vbNullString) = vData(i + 1)
       End If
       i = i + 2
     Else
@@ -276,10 +276,10 @@ Private Function GetEscape(ByRef sBuf As String, ByRef iPOS As Long) As String
       GetEscape = Mid(sBuf, iPOS + 1, 1)
       'iPOS = iPOS + 2
     Case Else
-      GetEscape = ""
+      GetEscape = vbNullString
     End Select
   Else
-    GetEscape = ""
+    GetEscape = vbNullString
   End If
 End Function
 
@@ -299,7 +299,7 @@ Private Function GetToken(ByRef sBuf As String, ByRef iPOS As Long)
   '50 - text
   '100 - control
   
-  GetToken = ""
+  GetToken = vbNullString
   State = 0
   
   Do While True
@@ -345,7 +345,7 @@ Private Function GetToken(ByRef sBuf As String, ByRef iPOS As Long)
       Exit Do
     Case "\"
       ch = GetEscape(sBuf, iPOS)
-      If ch = "" Then
+      If ch = vbNullString Then
         Select Case State
         Case 0, 10
           GetToken = "\"
@@ -388,7 +388,7 @@ Private Function SkipBlock(ByRef sBuf As String, ByRef iPOS As Long)
 
 
   Dim ch As String
-  SkipBlock = ""
+  SkipBlock = vbNullString
   ch = GetToken(sBuf, iPOS)
   Do While ch <> "c}" And ch <> "cEOF"
     If ch = "c{" Then
@@ -419,6 +419,7 @@ Private Function ParseField(ByRef sBuf As String, ByRef iPOS As Long)
     Case 0
       Select Case LCase(ch)
       Case "c\flddirty", "c\fldedit", "c\fldlock", "c\fldpriv"
+        State = State 'DoNothing
       Case "c{"
         State = 1                                ' ждем \*
       End Select
@@ -439,9 +440,10 @@ Debug.Print iPOS
     
       Select Case LCase(ch)
       Case "tref"
+        State = State 'DoNothing
       Case "c{"
         ch = GetToken(sBuf, iPOS)
-        If State = 3 Then sOpt = ""
+        If State = 3 Then sOpt = vbNullString
         Do While ch <> "c}" And ch <> "cEnd"
           If ch = "c\line" Or ch = "c\par" Then
             txt = txt & vbCrLf
@@ -501,7 +503,7 @@ Function RemoveTag(ByRef rtf As String, ByVal tag As String) As String
     ep = tp + 1
     SkipBlock RemoveTag, ep
  
-    If Mid(rtf, tp - 1, 1) <> " " And Not InSet(Mid(RemoveTag, ep), " ", "\", "{", "}") Then sSpace = " " Else sSpace = ""
+    If Mid(rtf, tp - 1, 1) <> " " And Not InSet(Mid(RemoveTag, ep), " ", "\", "{", "}") Then sSpace = " " Else sSpace = vbNullString
 
     RemoveTag = Mid(RemoveTag, 1, tp - 1) & sSpace & Mid(RemoveTag, ep)
     tp = InStr(1, RemoveTag, tag, vbTextCompare)
@@ -544,7 +546,7 @@ Public Function InsertAddress(ByRef ts As String, adr As Long, iPOS As Variant) 
   If VarType(iPOS) = vbString Then
     InsertAddress = ts
     
-    If iPOS <> "" Then
+    If iPOS <> vbNullString Then
       Dim iPosition
       For Each iPosition In Split(iPOS, ",")
         InsertAddress = InsertAddress(InsertAddress, adr, CLng(iPosition))
@@ -591,17 +593,17 @@ Public Function PrepareRTF(ByRef sFile As String) As String
  
   'Удалим историю редактирования
   re.Pattern = "( |\r\n)?\\pararsid\d+"
-  ts = re.Replace(ts, "")
+  ts = re.Replace(ts, vbNullString)
   re.Pattern = "( |\r\n)?\\insrsid\d+"
-  ts = re.Replace(ts, "")
+  ts = re.Replace(ts, vbNullString)
   re.Pattern = "( |\r\n)?\\charrsid\d+"
-  ts = re.Replace(ts, "")
+  ts = re.Replace(ts, vbNullString)
   re.Pattern = "( |\r\n)?\\sectrsid\d+"
-  ts = re.Replace(ts, "")
+  ts = re.Replace(ts, vbNullString)
   re.Pattern = "( |\r\n)?\\styrsid\d+"
-  ts = re.Replace(ts, "")
+  ts = re.Replace(ts, vbNullString)
   re.Pattern = "( |\r\n)?\\tblrsid\d+"
-  ts = re.Replace(ts, "")
+  ts = re.Replace(ts, vbNullString)
  
   'Удалим лишние плюшки WORD
   ts = RemoveTag(ts, "{\*\themedata")
@@ -639,7 +641,7 @@ Public Function PrepareRTF(ByRef sFile As String) As String
       If tp <> 0 Then
         ' у нас есть поле
 
-        If Trim(Mid(ts, cp, tp - cp)) <> "" And Not skipConst Then Res = Res & "PRNT" & LPad(Hex(tp - cp), "0", 8) & Mid(ts, cp, tp - cp)
+        If Trim(Mid(ts, cp, tp - cp)) <> vbNullString And Not skipConst Then Res = Res & "PRNT" & LPad(Hex(tp - cp), "0", 8) & Mid(ts, cp, tp - cp)
         cp = tp
         tp = tp + 7
         sFmtTmp = ParseField(ts, tp)
@@ -649,9 +651,9 @@ Public Function PrepareRTF(ByRef sFile As String) As String
 
         re.Pattern = "^\s*[_0-9а-яa-zё]+\s*\(.*\)$"
    
-        If Not re.test(GetRegExp("\g[\r\n]+").Replace(sTXT, "")) Then
+        If Not re.test(GetRegExp("\g[\r\n]+").Replace(sTXT, vbNullString)) Then
           'это не правильное поле оставляем его как есть
-          If Trim(Mid(ts, cp, tp - cp)) <> "" Then Res = Res & "PRNT" & LPad(Hex(tp - cp), "0", 8) & Mid(ts, cp, tp - cp)
+          If Trim(Mid(ts, cp, tp - cp)) <> vbNullString Then Res = Res & "PRNT" & LPad(Hex(tp - cp), "0", 8) & Mid(ts, cp, tp - cp)
         Else
           sFnc = Mid(sTXT, 1, InStr(1, sTXT, "(") - 1)
           sOpt = Mid(sTXT, InStr(1, sTXT, "(") + 1)
@@ -664,7 +666,7 @@ Public Function PrepareRTF(ByRef sFile As String) As String
     
           Select Case LCase(Trim(sFnc))
           Case "scan"
-            If sOpt = "" Then Err.Raise 1020, , "Ожидается выражение после scan"
+            If sOpt = vbNullString Then Err.Raise 1020, , "Ожидается выражение после scan"
             Dim nForPos, svCursorName, svSQLBody: nForPos = InStr(LCase(sOpt), " for ")
             If nForPos = 0 Then Err.Raise 1021, , "Параметр scan должен быть вида <Имя курсора> for <Выражение строкового вида>"
             svCursorName = Trim(Mid(sOpt, 1, nForPos - 1))
@@ -730,7 +732,7 @@ Public Function PrepareRTF(ByRef sFile As String) As String
           Case "if"
             Res = Res & "JMPF" & LPad(Hex(Len(sOpt)), "0", 3) & sOpt & "________"
       
-            aStrucStack(iStrucLevel) = Array(0, Str(Len(Res) - 7), "") 'if then or elif
+            aStrucStack(iStrucLevel) = Array(0, Str(Len(Res) - 7), vbNullString) 'if then or elif
             iStrucLevel = iStrucLevel + 1
       
             'Если за полем идет \par то отбрасываем его
@@ -742,7 +744,7 @@ Public Function PrepareRTF(ByRef sFile As String) As String
      
      
             Res = Res & "GOTO________"
-            If aStrucStack(iStrucLevel - 1)(2) <> "" Then aStrucStack(iStrucLevel - 1)(2) = aStrucStack(iStrucLevel - 1)(2) + ","
+            If aStrucStack(iStrucLevel - 1)(2) <> vbNullString Then aStrucStack(iStrucLevel - 1)(2) = aStrucStack(iStrucLevel - 1)(2) + ","
             aStrucStack(iStrucLevel - 1)(2) = aStrucStack(iStrucLevel - 1)(2) & Str(Len(Res) - 7)
       
             Res = InsertAddress(Res, Len(Res) + 1, CLng(aStrucStack(iStrucLevel - 1)(1)))
@@ -759,12 +761,12 @@ Public Function PrepareRTF(ByRef sFile As String) As String
             aStrucStack(iStrucLevel - 1)(0) = 1
       
             Res = Res & "GOTO"
-            If aStrucStack(iStrucLevel - 1)(2) <> "" Then aStrucStack(iStrucLevel - 1)(2) = aStrucStack(iStrucLevel - 1)(2) + ","
+            If aStrucStack(iStrucLevel - 1)(2) <> vbNullString Then aStrucStack(iStrucLevel - 1)(2) = aStrucStack(iStrucLevel - 1)(2) + ","
             aStrucStack(iStrucLevel - 1)(2) = aStrucStack(iStrucLevel - 1)(2) & Str(Len(Res) + 1)
             Res = Res & "________"
       
             Res = InsertAddress(Res, Len(Res) + 1, CLng(aStrucStack(iStrucLevel - 1)(1)))
-            aStrucStack(iStrucLevel - 1)(1) = ""
+            aStrucStack(iStrucLevel - 1)(1) = vbNullString
       
             'Если за полем идет \par то отбрасываем его
             nState = 3
@@ -773,8 +775,8 @@ Public Function PrepareRTF(ByRef sFile As String) As String
             If Not InSet(aStrucStack(iStrucLevel - 1)(0), 0, 1) Then Err.Raise 8003, , "Endif нарушает структуру программы"
       
             iStrucLevel = iStrucLevel - 1
-            If aStrucStack(iStrucLevel)(1) <> "" Then
-              If aStrucStack(iStrucLevel)(2) <> "" Then aStrucStack(iStrucLevel)(2) = aStrucStack(iStrucLevel)(1) & ","
+            If aStrucStack(iStrucLevel)(1) <> vbNullString Then
+              If aStrucStack(iStrucLevel)(2) <> vbNullString Then aStrucStack(iStrucLevel)(2) = aStrucStack(iStrucLevel)(1) & ","
               aStrucStack(iStrucLevel)(2) = aStrucStack(iStrucLevel)(2) & aStrucStack(iStrucLevel)(1)
             End If
       
@@ -823,7 +825,7 @@ Public Function PrepareRTF(ByRef sFile As String) As String
       
       
           Case Else
-            Err.Raise 1000, "", "Не известная комманда: " & sFnc
+            Err.Raise 1000, vbNullString, "Не известная комманда: " & sFnc
           End Select
         End If
         cp = tp
@@ -879,12 +881,12 @@ Public Function PrepareRTF(ByRef sFile As String) As String
  
   Res = Res & "ENDT"
   
-  If MetList <> "" Then
-    Res = "CALL00d" & LPad(Trim(Len(Res) & ""), "0", 13) & Mid(Res, 21) & MetList & "RETC"
+  If MetList <> vbNullString Then
+    Res = "CALL00d" & LPad(Trim(Len(Res) & vbNullString), "0", 13) & Mid(Res, 21) & MetList & "RETC"
   End If
  
   If iStrucLevel > 1 Then
-    MsgBox IIf(aStrucStack(iStrucLevel - 1)(0) <> 10, "В ходе разбора файла обнаружен не закрытый блок IF. ", "") & IIf(aStrucStack(iStrucLevel - 1)(0) = 10, "В ходе разбора файла обнаружен не закрытый блок SCAN.", "")
+    MsgBox IIf(aStrucStack(iStrucLevel - 1)(0) <> 10, "В ходе разбора файла обнаружен не закрытый блок IF. ", vbNullString) & IIf(aStrucStack(iStrucLevel - 1)(0) = 10, "В ходе разбора файла обнаружен не закрытый блок SCAN.", vbNullString)
     Exit Function
   End If
 
@@ -924,7 +926,7 @@ Private Function DumpContext(ByRef ParamList As Variant) As String
     For Each key In ParamList.Keys
       If Not InSet(LCase(key), "%", "now", "date") Then
         If Not IsArray(ParamList(key)) Then
-          DumpContext = DumpContext & vbCrLf & key & " = " & Mid(ParamList(key), 1, 128) & IIf(Len(ParamList(key)) > 128, "...", "")
+          DumpContext = DumpContext & vbCrLf & key & " = " & Mid(ParamList(key), 1, 128) & IIf(Len(ParamList(key)) > 128, "...", vbNullString)
         End If
       End If
     Next
@@ -1038,7 +1040,7 @@ Private Function GetNotValue(Formula As Variant, ByRef ParamList As Variant, ByR
     GetNotValue = GetNotValue(Formula, ParamList, StartPos)
   Else
     tmpPos = StartPos
-    ch = ""
+    ch = vbNullString
     Do While True
       If Not (ch2 >= "a" And ch2 <= "z") Or tmpPos - StartPos > 3 Then Exit Do
       tmpPos = tmpPos + 1
@@ -1060,7 +1062,7 @@ End Function
 Public Function GetPartFromFormula(Formula As Variant, ByRef StartPos As Long)
   'список терминаторов
   Dim cp
-  GetPartFromFormula = ""
+  GetPartFromFormula = vbNullString
   Do While Mid(Formula, StartPos, 1) = " ": StartPos = StartPos + 1: Loop
   Do While StartPos <= Len(Formula)
     If LCase(Mid(Formula, StartPos, 2)) = "&h" Then
@@ -1192,10 +1194,10 @@ ElseIf sCurrentChar >= "0" And sCurrentChar <= "9" Or sCurrentChar = "." Then
         
       
 Else
-  sFnc = ""
+  sFnc = vbNullString
   sFnc = Trim(GetPartFromFormula(Formula, StartPos))
    
-  If sFnc = "" Then Err.Raise 1000, , "Ожидается какое либо значение."
+  If sFnc = vbNullString Then Err.Raise 1000, , "Ожидается какое либо значение."
    
   If Mid(Formula, StartPos, 1) = "(" Then        'Функция
     iArg = 0
@@ -1235,7 +1237,7 @@ Else
       Else
       
         Set objStream = CreateObject("ADODB.Stream")
-        If aArg(1) & "" <> "" Then
+        If aArg(1) & vbNullString <> vbNullString Then
           objStream.Charset = aArg(1)
           objStream.Type = 2                     'adTypeText
         Else
@@ -1257,7 +1259,7 @@ Else
       objRegExp.IgnoreCase = True
       objRegExp.Multiline = False
       'Фильтр по умолчанию настроен на картинки
-      If aArg(1) <> "" Then objRegExp.Pattern = aArg(1) Else objRegExp.Pattern = ".+\.(jpg|jpeg|png|emf)$"
+      If aArg(1) <> vbNullString Then objRegExp.Pattern = aArg(1) Else objRegExp.Pattern = ".+\.(jpg|jpeg|png|emf)$"
     
       For Each FileName In aArg(0)(0).Keys
         If objRegExp.test(FileName) Then
@@ -1274,7 +1276,7 @@ Else
       Next
     Case "rtfimg"
       If IsNull(aArg(0)) Or IsEmpty(aArg(0)) Then
-        GetValue = ""
+        GetValue = vbNullString
       ElseIf LCase(TypeName(aArg(0))) <> "byte()" Then
         GetValue = "{Здесь должно быть изображение: " & aArg(0) & "}"
       Else
@@ -1310,7 +1312,7 @@ Else
           aArg(cp + 1) = 0
         ElseIf IsEmpty(aArg(cp + 1)) Then
           aArg(cp + 1) = 0
-        ElseIf aArg(cp + 1) = "" Then
+        ElseIf aArg(cp + 1) = vbNullString Then
           aArg(cp + 1) = 0
         Else
           aArg(cp + 1) = 1
@@ -1320,8 +1322,8 @@ Else
       Next
       'дальше описываем остальные функции
     Case "calc", "set"
-      ParamList("" & aArg(0)) = aArg(1)
-      GetValue = "" & aArg(0)
+      ParamList(vbNullString & aArg(0)) = aArg(1)
+      GetValue = vbNullString & aArg(0)
     Case "true"
       GetValue = True
     Case "false"
@@ -1343,7 +1345,7 @@ TryAsNativeFunction:
 TryAsNativeFunctionEntry:
       Dim sFunctionCall
   
-      sFunctionCall = ""
+      sFunctionCall = vbNullString
       For cp = 0 To iArg - 1
         If cp > 0 Then sFunctionCall = sFunctionCall & ", "
         sFunctionCall = sFunctionCall & ToSQL(aArg(cp))
@@ -1359,8 +1361,8 @@ TryAsNativeFunctionEntry:
     ElseIf ParamList.exists(sFnc) Then           'Иначе считаем переменной и ищем в списке
       GetValue = ParamList(sFnc)
       Exit Function
-    ElseIf ParamList.exists(Replace(Replace(sFnc, "[", ""), "]", "")) Then 'Иначе считаем переменной и ищем в списке
-      GetValue = ParamList(Replace(Replace(sFnc, "[", ""), "]", ""))
+    ElseIf ParamList.exists(Replace(Replace(sFnc, "[", vbNullString), "]", vbNullString)) Then 'Иначе считаем переменной и ищем в списке
+      GetValue = ParamList(Replace(Replace(sFnc, "[", vbNullString), "]", vbNullString))
       Exit Function
     Else
       On Error GoTo ParamNotFound
@@ -1427,12 +1429,13 @@ Public Function GetTemplate(ByVal idReport As Long) As Variant
     End If
     Set objF = Nothing
   End If
-  GetTemplate = Array(sExtension, tRep("clTemplate") & "")
+  GetTemplate = Array(sExtension, tRep("clTemplate") & vbNullString)
   tRep.Close
   Set tRep = Nothing
  
 End Function
 
+'@EntryPoint
 Function fncConvertTxtToRTF(ByRef Text As String) As String
   'Внутренняя функция для формирования отчета. Конвертирует текст в корректный RTF блок. Если начинается с `{\*\shppict`, то оставляет как есть
   '#param Text: Текст
@@ -1492,7 +1495,7 @@ Public Function PictureDataToRTF(ByVal PictureData, ByVal nWidth As Variant, ByV
   '#raises 1010 - Исключение возникает в случае неподходящего формата изображения
    
   If IsNull(PictureData) Then
-    PictureDataToRTF = ""
+    PictureDataToRTF = vbNullString
   Else
     PictureDataToRTF = "{\*\shppict{\pict"
     
@@ -1503,7 +1506,7 @@ Public Function PictureDataToRTF(ByVal PictureData, ByVal nWidth As Variant, ByV
     If PictureData(0) = &H15 And PictureData(1) = &H1C Then
       Dim nProgID, offsProgID, sProgID
       offsProgID = WordFromByteArray(PictureData, 14)
-      sProgID = ""
+      sProgID = vbNullString
       For nProgID = WordFromByteArray(PictureData, 10) To 2 Step -1
         sProgID = sProgID & Chr(PictureData(offsProgID))
         offsProgID = offsProgID + 1
@@ -1527,7 +1530,7 @@ Public Function PictureDataToRTF(ByVal PictureData, ByVal nWidth As Variant, ByV
           
           PictureDataToRTF = PictureDataToRTF & "\dibitmap0 "
           Dim HexData As String
-          HexData = Replace(Replace(Replace(ByteArrayToHex(PictureData), " ", ""), vbCr, ""), vbLf, "")
+          HexData = Replace(Replace(Replace(ByteArrayToHex(PictureData), " ", vbNullString), vbCr, vbNullString), vbLf, vbNullString)
           HexData = Mid(HexData, (nOffset) * 2 + 1, (bitMapSize) * 2)
                   
           For nOffset = 1 To Len(HexData) Step 256
@@ -1588,13 +1591,13 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
  
   iRC = 0
  
-  If dic("extension") <> "" Then
+  If dic("extension") <> vbNullString Then
     sfncConvert = "fncConvertTxtTo" & dic("extension")
   End If
  
   On Error Resume Next
-  sValue = Application.Run(sfncConvert, "")
-  If Err.Number <> 0 Then sfncConvert = ""
+  sValue = Application.Run(sfncConvert, vbNullString)
+  If Err.Number <> 0 Then sfncConvert = vbNullString
   On Error GoTo 0
   
   PC = 1
@@ -1648,8 +1651,8 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
         On Error GoTo 0
       End If
    
-      sValue = Nz(sValue, "")
-      If sfncConvert <> "" Then sValue = Application.Run(sfncConvert, sValue)
+      sValue = Nz(sValue, vbNullString)
+      If sfncConvert <> vbNullString Then sValue = Application.Run(sfncConvert, sValue)
       If Not OutStream Is Nothing Then OutStream.Write sValue Else MakeReport = MakeReport & sValue
       PC = PC + iCnt + 7
     Case "CALC"
@@ -1713,7 +1716,6 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
       Else
         PC = PC + 15 + iCnt
       End If
-    Case "JMPI"
       '<DOC>
       '`ENDT`
       'Метка конца шаблона. При встрече с данной меткой обработка прервывается
@@ -1752,8 +1754,8 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
         aRecordSet(1)("name") = sSQL
         aRecordSet(1)("alias") = sName
   
-        Application.Run sSQL & "_new", aRecordSet(1), sName, Mid(sValue, iTmp), dic
-        If Err Then Err.Raise Err.Number, Err.Source, Err.Description
+        Application.Run sSQL & "_new", aRecordSet(1), Mid(sValue, iTmp), dic
+        If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
       Else
         sSQL = Trim(GetExpression(sValue, dic, 1)) 'получаем текст из шаблона
         sSQL = FormatString(sSQL, dic)           'подставляем переменные
@@ -1785,7 +1787,7 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
           Set aRecordSet(1) = CurrentDb.OpenRecordset(sSQL)
         End If
       
-        If Err Then                              'Формируем текст ошибки
+        If Err.Number <> 0 Then                            'Формируем текст ошибки
           On Error GoTo 0
           sErrorMsg = "Ошибка при открытии курсора {" & sName & "}." & vbCrLf & Err.Description
           Err.Clear
@@ -1801,7 +1803,7 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
       Dim bEOF
       If bisCustomRS Then
         bEOF = Application.Run(aRecordSet(1)("name") & "_eof", aRecordSet(1), dic)
-        If Err Then Err.Raise Err.Number, Err.Source, Err.Description
+        If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
       Else
         bEOF = aRecordSet(1).EOF
       End If
@@ -1809,7 +1811,7 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
       If bEOF Then
         If bisCustomRS Then
           Application.Run aRecordSet(1)("name") & "_close", aRecordSet(1), dic
-          If Err Then Err.Raise Err.Number, Err.Source, Err.Description
+          If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
         Else
           aRecordSet(1).Close
         End If
@@ -1858,7 +1860,7 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
       PC = PC + iCnt + 7
       On Error Resume Next
       sValue = Application.Eval(sValue)
-      If Err Then
+      If Err.Number <> 0 Then
         On Error GoTo 0
         sValue = GetExpression(sValue, dic, 1)
       Else
@@ -1883,7 +1885,7 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
 
 End Function
 
-Public Function FetchRow(ByRef pDic, Optional ByVal pCursorName As String = "")
+Public Function FetchRow(ByRef pDic, Optional ByVal pCursorName As String = vbNullString)
   'Внутренняя функция для формирования отчета. Извлекает из курсора очередную строку и обновляет значения в контексте.
   '#param pDic: Текущий контекст
   '#param pCursorName: Имя курсора. Если не задан то считыается текущий курсор
@@ -1892,7 +1894,7 @@ Public Function FetchRow(ByRef pDic, Optional ByVal pCursorName As String = "")
   Dim vRecordSet, vCursorName, vFiles, tmpdic, fld
   
   vRecordSet = pDic("@SYS_CurrentRecordSet")
-  If pCursorName = "" Then
+  If pCursorName = vbNullString Then
     vCursorName = vRecordSet(0)
     Set vRecordSet = vRecordSet(1)
   Else
@@ -1992,7 +1994,7 @@ Function GetTypeContent(ByRef tpData)
   '#param tpData: Массив байт картинки
 
   If IsNull(tpData) Then
-    GetTypeContent = ""
+    GetTypeContent = vbNullString
   ElseIf VarType(tpData) = 8209 Then
     If UBound(tpData) > 4 Then
       If tpData(0) = &HFF Then
@@ -2027,14 +2029,14 @@ Function GetTypeContent(ByRef tpData)
 
 End Function
 
-Function FormatStringA(Text As String, ParamArray apArgs() As Variant) As String
+Function FormatStringA(ByRef Text As String, ParamArray apArgs() As Variant) As String
   'Аналогично FormatString, только принимает на вход неопределенное число параметров, далее переданные параметры будут доступны под именами p1, p2, p3 ....
   Dim vArgs
   vArgs = apArgs
   FormatStringA = FormatString(Text, vArgs)
 End Function
 
-Function FormatString(Text As String, Optional ByRef ParamList As Variant = Nothing) As String
+Function FormatString(ByRef Text As String, Optional ByRef ParamList As Variant = Nothing) As String
   'Производит замену в тексте подстановочных сиволов на значения заданные в словаре.
   'Подстановочные символы обрамляются символом `%`. Если нужно вывести символ как есть то его необходимо удвоить `%%`.
   'Если первый символ равен @ далее следует имя фильтра и имя поля к которому нужно применить фильтр
@@ -2101,7 +2103,7 @@ Function FormatString(Text As String, Optional ByRef ParamList As Variant = Noth
         If Mid(smid, i, 1) = "," Or Mid(smid, i, 1) = ";" Then
           i = i + 1
           sField = GetPartFromFormula(smid, i)
-          If sField <> "" And sFilter <> "" And vParams.exists(sFilter & ".oper") And vParams.exists(sFilter) Then
+          If sField <> vbNullString And sFilter <> vbNullString And vParams.exists(sFilter & ".oper") And vParams.exists(sFilter) Then
             sOperator = UCase(Trim(vParams(sFilter & ".oper")))
             vValue = vParams(sFilter)
             If Not IsArray(vValue) Then vValue = Array(vValue)
@@ -2111,12 +2113,12 @@ Function FormatString(Text As String, Optional ByRef ParamList As Variant = Noth
               Case "BTWWL", "BTWWB": sOperator = "GR"
               End Select
             End If
-            smid = ""
+            smid = vbNullString
             If sOperator = "IN" Or sOperator = "NOTIN" Then
               For i = 0 To UBound(vValue)
                 If i > 0 Then smid = smid & "," & ToSQL(vValue(i)) Else smid = ToSQL(vValue(i))
               Next
-              If smid <> "" Then smid = " AND " & IIf(sOperator = "NOTIN", "NOT ", "") & sField & " IN (" & smid & ")"
+              If smid <> vbNullString Then smid = " AND " & IIf(sOperator = "NOTIN", "NOT ", vbNullString) & sField & " IN (" & smid & ")"
             ElseIf sOperator = "BTW" Or sOperator = "BTWWR" Or sOperator = "BTWWL" Or sOperator = "BTWWB" Then
               smid = " AND " & ToSQL(vValue(0)) & IIf(sOperator = "BTW" Or sOperator = "BTWWR", "<=", "<") & sField & _
                      " AND " & sField & IIf(sOperator = "BTW" Or sOperator = "BTWWL", "<=", "<") & ToSQL(vValue(1))
@@ -2136,11 +2138,11 @@ Function FormatString(Text As String, Optional ByRef ParamList As Variant = Noth
               End Select
             End If
           Else
-            smid = ""
+            smid = vbNullString
           End If
           vValue = Empty
         Else
-          smid = ""
+          smid = vbNullString
         End If
       ElseIf Left(smid, 1) = "$" Then
         i = 2
@@ -2168,7 +2170,7 @@ ErrorMet:                                 smid = "{Error: " & Err.Description & 
   Loop
 End Function
 
-Function InSet(spKey As Variant, ParamArray apArgs() As Variant) As Boolean
+Function InSet(ByRef spKey As Variant, ParamArray apArgs() As Variant) As Boolean
   'Если первый параметр равен одному из последующих то возвращает Истину. В данной реализации Null = Null возвращает так же Истину
   '#param spKey: Проверяемое значение
   '#param apArgs: Одно или несколько тестовых значений. Если значение является массивом, то проверяется каждый элемент массива. Массивы могут быть вложенными
@@ -2177,9 +2179,9 @@ Function InSet(spKey As Variant, ParamArray apArgs() As Variant) As Boolean
   InSet = InSetInner(spKey, v)
 End Function
 
-Function InSetInner(spKey As Variant, apArgs As Variant) As Boolean
+Function InSetInner(ByRef spKey As Variant, ByRef apArgs As Variant) As Boolean
   Dim bvIsNull As Boolean
-  Dim i As Integer
+  Dim i As Long
  
   If IsEmpty(spKey) Then spKey = Null
   bvIsNull = IsNull(spKey)
@@ -2196,7 +2198,7 @@ Function InSetInner(spKey As Variant, apArgs As Variant) As Boolean
   InSetInner = False
 End Function
 
-Public Function ToSQL(pValue)
+Public Function ToSQL(ByRef pValue As Variant)
   'На основе типа данных преобразует значение в SQL литерал
   '#param pValue - Значение для преобразования
   Select Case VarType(pValue)
@@ -2215,14 +2217,14 @@ Public Function ToSQL(pValue)
   Case vbBoolean
     If pValue Then ToSQL = "true" Else ToSQL = "false"
   Case vbInteger, vbLong, 20
-    ToSQL = pValue & ""
+    ToSQL = pValue & vbNullString
   Case vbSingle, vbDouble, vbCurrency, vbDecimal
-    ToSQL = Replace(pValue & "", ",", ".")
+    ToSQL = Replace(pValue & vbNullString, ",", ".")
     'vbByte ?? char
   Case Else
     If IsArray(pValue) Then
       Dim vElement
-      ToSQL = ""
+      ToSQL = vbNullString
       For Each vElement In pValue
         If Len(ToSQL) = 0 Then
           ToSQL = ToSQL(vElement)
@@ -2230,14 +2232,14 @@ Public Function ToSQL(pValue)
           ToSQL = ToSQL & ", " & ToSQL(vElement)
         End If
       Next
-      If ToSQL = "" Then ToSQL = "NULL"
+      If ToSQL = vbNullString Then ToSQL = "NULL"
     Else
       Err.Raise 1001, , "Unsupported type of SQL value!"
     End If
   End Select
 End Function
 
-Public Function SelectOneValue(sql As String) As Variant
+Public Function SelectOneValue(ByRef sql As String) As Variant
   'Выполняет запрос и значение из первой колонки первой строки
   '#param SQL: Текст запроса
  
@@ -2257,7 +2259,7 @@ End Function
 'SUBBLOCK_BEGIN:BARCODE_COMMON
 'Общие функции для формирования штрихкодов в форматe EMF.
 
-Function longToByte(l)
+Function longToByte(ByVal l As Long) As String
   Dim tl: tl = l
   longToByte = Chr(tl Mod 256): tl = tl \ 256
   longToByte = longToByte & Chr(tl Mod 256):  tl = tl \ 256
@@ -2265,45 +2267,45 @@ Function longToByte(l)
   longToByte = longToByte & Chr(tl Mod 256)
 End Function
 
-Function intToByte(i)
+Function intToByte(ByVal i As Long) As String
   Dim ti: ti = i
   intToByte = Chr(ti Mod 256):  ti = ti \ 256
   intToByte = intToByte & Chr(ti Mod 256)
 End Function
 
-Function block(fnc, Data)
+Function block(ByVal fnc As Long, ByRef Data As String) As String
   block = intToByte(fnc) & Data
   block = longToByte((Len(block) \ 2) + 2) & block
 End Function
 
-Function Point(x, y)
+Function Point(ByVal x As Long, ByVal y As Long) As String
   Point = intToByte(x) & intToByte(y)
 End Function
 
-Function color(r, g, b)
+Function color(ByVal r As Long, ByVal g As Long, ByVal b As Long) As String
   color = Chr(0) & Chr(b Mod 256) & Chr(g Mod 256) & Chr(r Mod 256)
 End Function
 
-Function RectAsPoligon(ByRef objCount, l, t, r, b)
+Function RectAsPoligon(ByRef objCount As Long, ByVal l As Long, ByVal t As Long, ByVal r As Long, ByVal b As Long) As String
   objCount = objCount + 1
   RectAsPoligon = block(&H324, intToByte(4) & Point(l, b) & Point(l, t) & Point(r, t) & Point(r, b))
 End Function
 
-Function CreatePenIndirect(ByRef objCount, PenStyle, pPoint, pColor)
+Function CreatePenIndirect(ByRef objCount As Long, ByVal PenStyle As Long, ByVal pPoint As String, ByVal pColor As String) As String
   objCount = objCount + 1
   CreatePenIndirect = block(&H2FA, intToByte(PenStyle) & pPoint & pColor)
 End Function
 
-Function SelectObject(nObject)
+Function SelectObject(ByVal nObject As Long)
   SelectObject = block(&H12D, intToByte(nObject))
 End Function
 
-Function CreateBrushIndirect(objCount, style, color, hatch)
+Function CreateBrushIndirect(ByRef objCount As Long, ByVal style As Long, ByVal color As String, ByVal hatch As Long) As String
   objCount = objCount + 1
   CreateBrushIndirect = block(&H2FC, intToByte(style) & color & intToByte(hatch))
 End Function
 
-Sub addInArray(ByRef spArray, ByRef pItem)
+Sub addInArray(ByRef spArray As Variant, ByRef pItem As Variant)
   'Добавляет значение в массив
   '#param spArray: Массив
   '#param pItem: Добавляемый элемент
@@ -2314,7 +2316,7 @@ Sub addInArray(ByRef spArray, ByRef pItem)
 End Sub
 
 Function zebra2wmf(s, xFactor, yFactor, ByRef MaxWidth)
-  Dim recs, objCount, i, l, largest, Size
+  Dim recs, objCount As Long, i, l, largest, Size
   recs = Empty
   objCount = 0
   addInArray recs, CreatePenIndirect(objCount, 0, Point(0, 0), color(255, 0, 0))
@@ -2340,7 +2342,7 @@ Function zebra2wmf(s, xFactor, yFactor, ByRef MaxWidth)
     i = i + l
   Loop
   addInArray recs, block(0, Empty)               'EOF
-  zebra2wmf = Join(recs, "")
+  zebra2wmf = Join(recs, vbNullString)
   largest = 0
   For Each i In recs
     If Len(i) / 2 > largest Then largest = Len(i) / 2
@@ -2378,7 +2380,7 @@ End Function
 'SUBBLOCK_DEPENDENCE:BARCODE_COMMON
 'Добавляет поддержку штрих кодов в формате CODE128
 
-Public Function Code128(pParamList, aArg As Variant) As String
+Public Function Code128(ByRef pParamList As Object, aArg As Variant) As String
   'REPORT_FUNCTION: Code128(Текст;Ширина;Высота)
   'Вставляет в документ картинку с штрихкодом в формате CODE128. Штрих код должен состоять только из букв английского алфавита и цифр. Контрольное число добавляется автоматически в конец.
   '#param Текст: Кодируемый текст
@@ -2387,7 +2389,7 @@ Public Function Code128(pParamList, aArg As Variant) As String
   '#return: RTF блок
   On Error GoTo OnError:
   Dim byteStorage() As Byte, BCWidth
-  If aArg(0) <> "" Then
+  If aArg(0) <> vbNullString Then
     byteStorage = StrConv(zebra2wmf(code128_zebra(aArg(0), 3), 2, 40, BCWidth), vbFromUnicode)
     Code128 = PictureDataToRTF(byteStorage, aArg(1), aArg(2))
   Else
@@ -2414,7 +2416,7 @@ Function code128_zebra(SourceString, return_type)
   Dim i, dataToFormat, n, currentEncoding, checkDigitValue, stringlen, currentValue, dataToPrint
   
   If IsNull(SourceString) Then Exit Function
-  If SourceString = "" Then Exit Function
+  If SourceString = vbNullString Then Exit Function
  
   
   i = 1
@@ -2426,7 +2428,7 @@ Function code128_zebra(SourceString, return_type)
   If return_type = 1 Then
     'Просто форматируем в переданное значение
     i = 1
-    code128_zebra = ""
+    code128_zebra = vbNullString
     For i = 1 To stringlen
       n = Asc(Mid(dataToFormat, i, 1))
       If i < Len(dataToFormat) - 2 And n = 202 Then
@@ -2459,8 +2461,6 @@ Function code128_zebra(SourceString, return_type)
     ElseIf n >= 32 And n < 127 Then
       code128_zebra = Chr(204)                   'B
       currentEncoding = "B"
-    Else
-     
     End If
      
    
@@ -2494,7 +2494,7 @@ Function code128_zebra(SourceString, return_type)
       i = i + 1
     Loop
    
-    If code128_zebra = "" Then
+    If code128_zebra = vbNullString Then
       Exit Function
     End If
    
@@ -2514,8 +2514,8 @@ Function code128_zebra(SourceString, return_type)
      
       If return_type = 3 Then
         dataToPrint = code128_zebra
-        code128_zebra = ""
-        Dim zebraArr: zebraArr = Array("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "|| ||  ||  ", _
+        code128_zebra = vbNullString
+        Dim zebraArr: zebraArr = Array(vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, "|| ||  ||  ", _
                                        "||  || ||  ", "||  ||  || ", "|  |  ||   ", "|  |   ||  ", "|   |  ||  ", "|  ||  |   ", "|  ||   |  ", "|   ||  |  ", _
                                        "||  |  |   ", "||  |   |  ", "||   |  |  ", "| ||  |||  ", "|  || |||  ", "|  ||  ||| ", "| |||  ||  ", "|  ||| ||  ", _
                                        "|  |||  || ", "||  |||  | ", "||  | |||  ", "||  |  ||| ", "|| |||  |  ", "||  ||| |  ", "||| || ||| ", "||| |  ||  ", _
@@ -2527,9 +2527,9 @@ Function code128_zebra(SourceString, return_type)
                                        "|  | ||    ", "|  |    || ", "|    | ||  ", "|    |  || ", "| ||  |    ", "| ||    |  ", "|  || |    ", "|  ||    | ", _
                                        "|    || |  ", "|    ||  | ", "||    |  | ", "||  | |    ", "|||| ||| | ", "||    | |  ", "|   |||| | ", "| |  ||||  ", _
                                        "|  | ||||  ", "|  |  |||| ", "| ||||  |  ", "|  |||| |  ", "|  ||||  | ", "|||| |  |  ", "||||  | |  ", "||||  |  | ", _
-                                       "|| || |||| ", "|| |||| || ", "|||| || || ", "| | ||||   ", "| |   |||| ", "|   | |||| ", "", "", "", "", "", "", "", "", "", _
-                                       "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", _
-                                       "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "|| ||  ||  ", "| |||| |   ", "| ||||   | ", _
+                                       "|| || |||| ", "|| |||| || ", "|||| || || ", "| | ||||   ", "| |   |||| ", "|   | |||| ", vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, _
+                                       vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, _
+                                       vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, vbNullString, "|| ||  ||  ", "| |||| |   ", "| ||||   | ", _
                                        "|||| | |   ", "|||| |   | ", "| ||| |||| ", "| |||| ||| ", "||| | |||| ", "|||| | ||| ", "|| |    |  ", "|| |  |    ", _
                                        "|| |  |||  ", "||   ||| | ||", "|| ||  ||  ")
         For i = 1 To Len(dataToPrint)
@@ -2558,7 +2558,7 @@ Public Function EAN13(pParamList, aArg As Variant) As String
   On Error GoTo OnError:
 
   Dim byteStorage() As Byte, BCWidth
-  If aArg(0) <> "" Then
+  If aArg(0) <> vbNullString Then
   
     byteStorage = StrConv(zebra2wmf(EAN13_zebra(aArg(0), False), 2, 40, BCWidth), vbFromUnicode)
     EAN13 = PictureDataToRTF(byteStorage, aArg(1), aArg(2))
@@ -2577,7 +2577,7 @@ Public Function EAN13CheckNumber(ByVal Code)
   '#param Code: Число для кодировки
   
   Dim sCode, i, CheckSum
-  sCode = Code & ""
+  sCode = Code & vbNullString
   CheckSum = 0
   For i = 0 To Len(sCode) - 1
     If i Mod 2 = 0 Then EAN13CheckNumber = EAN13CheckNumber + CInt(Mid(sCode, Len(sCode) - i, 1)) * 3 Else EAN13CheckNumber = EAN13CheckNumber + CInt(Mid(sCode, Len(sCode) - i, 1))
@@ -2593,7 +2593,7 @@ Function EAN13_zebra(ByVal Code, addCheckSum)
   On Error GoTo EAN13_Err
 
   Dim sCode, zebra, codeSchema, i
-  sCode = Code & ""
+  sCode = Code & vbNullString
   
   If Not isNumber(sCode) Then Exit Function
   
@@ -2652,7 +2652,7 @@ End Function
 
 
 'SUBBLOCK_BEGIN:NUMBERITERATION
-Public Sub NumberIteration_New(ByRef Container, ByVal sAlias, ByVal sParam, ByRef pDic)
+Public Sub NumberIteration_New(ByRef Container, ByVal sParam, ByRef pDic)
   'Численный итератор, используется в scan. `for using numberIteration from НачальноеЗначение to КонечноеЗначение step Шаг`
 
   On Error GoTo OnError:
@@ -2669,7 +2669,7 @@ Public Sub NumberIteration_New(ByRef Container, ByVal sAlias, ByVal sParam, ByRe
   tmp = LCase(GetPartFromFormula(sParam, i))
   If tmp = "step" Then
     Container("step") = CDbl(GetExpression(sParam, pDic, i))
-  ElseIf tmp <> "" Then
+  ElseIf tmp <> vbNullString Then
     Err.Raise 1012, , "ожидается step получено [" & tmp & "]"
   Else
     Container("step") = 1
@@ -2700,7 +2700,7 @@ Public Function NumberIteration_EOF(ByRef Container, ByRef pDic)
 OnError:
   Dim errNumber, errSource, errDescription
   errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
-  On Error GoTo -1
+  On Error GoTo 0
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
   
 End Function
@@ -2724,11 +2724,12 @@ Public Function NumberIteration_Fetch(ByRef Container, ByRef pDic)
 OnError:
   Dim errNumber, errSource, errDescription
   errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
-  On Error GoTo -1
+  On Error GoTo 0
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
   
 End Function
 
+'@EntryPoint
 Public Sub NumberIteration_Close(ByRef Container, ByRef pDic)
   '#hide
   'Численный итератор, удаление ресурсов
@@ -2740,7 +2741,7 @@ Public Sub NumberIteration_Close(ByRef Container, ByRef pDic)
 OnError:
   Dim errNumber, errSource, errDescription
   errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
-  On Error GoTo -1
+  On Error GoTo 0
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
   
 End Sub
@@ -2749,7 +2750,7 @@ End Sub
 
 
 'SUBBLOCK_BEGIN:SCAN_WHILE
-Public Sub While_New(ByRef Container, ByVal sAlias, ByVal sParam, ByRef pDic)
+Public Sub While_New(ByRef Container, ByVal sParam, ByRef pDic)
   'Итератор While, используется в scan. `for using while i < 10`
 
   On Error GoTo OnError:
@@ -2758,7 +2759,7 @@ Public Sub While_New(ByRef Container, ByVal sAlias, ByVal sParam, ByRef pDic)
 OnError:
   Dim errNumber, errSource, errDescription
   errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
-  On Error GoTo -1
+  On Error GoTo 0
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
   
 End Sub
@@ -2773,7 +2774,7 @@ Public Function While_EOF(ByRef Container, ByRef pDic)
 OnError:
   Dim errNumber, errSource, errDescription
   errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
-  On Error GoTo -1
+  On Error GoTo 0
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
   
 End Function
@@ -2781,14 +2782,14 @@ End Function
 Public Function While_Fetch(ByRef Container, ByRef pDic)
   '#hide
   'Итератор While, выборка очередного значения
-
+  While_Fetch = True
   On Error GoTo OnError:
   
   Exit Function
 OnError:
   Dim errNumber, errSource, errDescription
   errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
-  On Error GoTo -1
+  On Error GoTo 0
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
   
 End Function
@@ -2803,7 +2804,7 @@ Public Sub While_Close(ByRef Container, ByRef pDic)
 OnError:
   Dim errNumber, errSource, errDescription
   errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
-  On Error GoTo -1
+  On Error GoTo 0
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
   
 End Sub
