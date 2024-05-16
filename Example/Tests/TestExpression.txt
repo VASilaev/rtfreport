@@ -1,23 +1,73 @@
-Description = Самотестироавание
-Expected=&1
-Actual=%cLng(1)
+Description = Выражения. Числа
+
+Expected=0
+Actual=%0
 @AssertEquals
 
+Expected=0.1
+Actual=%0.1@
+@AssertEquals
+
+Expected=Decimal
+Actual=%typename(Actual)
+@AssertEquals
+
+Expected=0.1
+Actual=%.1
+@AssertEquals
+
+Expected=cDec("100000000000000000000")
+Actual=%100000000000000000000@
+@AssertEquals
 
 Expected=!1,0
 Actual=%cdbl(1)
 @AssertEquals
 
+Expected=&1
+Actual=%cLng(1)
+@AssertEquals
+
+
+Description = Выражения. Строки
+
+Expected=TestString
+Actual=%"TestString"
+@AssertEquals
+
+Actual=%'TestString'
+@AssertEquals
+
+Actual=%`TestString`
+@AssertEquals
+
+Expected=Test"String"
+Actual=%"Test""String"""
+@AssertEquals
+
+Actual=%`Test"String"`
+@AssertEquals
+
+Expected=&52
+Actual=$txt$Это длинный текст
+Продолжение текста с новой строки
+$txt$
+Actual=%Len(Actual)
+@AssertEquals
+
+
+
+Description = Выражения. Даты
 
 Expected=#01.12.2024 20:21:22
 Actual=%cDate("01.12.2024 20:21:22")
 @AssertEquals
 
-
-Actual=$txt$Это длинный текст
-Продолжение текста с новой строки
-$txt$
-Expected=&52
-Actual=%Len(Actual)
+Actual=%#12/01/2024 20:21:22#
 @AssertEquals
+
+
+
+
+
 
