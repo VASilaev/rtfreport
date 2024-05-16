@@ -935,7 +935,7 @@ Private Function DumpContext(ByRef ParamList As Variant) As String
 
 End Function
 
-Public Function GetExpression(ByRef Formula As Variant, Optional ByRef ParamList As Variant = Nothing, Optional ByRef StartPos As Long = 1) As Variant
+Public Function GetExpression(ByRef Formula As Variant, Optional ByRef ParamList As Variant = Nothing, Optional ByRef StartPos As Long = 1)
   'Внутренняя функция для формирования отчета. Разбирает варыжение и возвращает его значение. Строки задаются в двойных ковычках.
   'Значения переменных должны находиться в текущем контексте или находиться при помощи функции eval. Стартовые пробелы пропускаются.
   'Для получения более подробной информации см. справку.
@@ -993,7 +993,7 @@ Public Function GetExpression(ByRef Formula As Variant, Optional ByRef ParamList
     
     If ch = "&" And LCase(Mid(Formula, tmpPos + 1, 1)) = "h" Then ch = "&h"
     
-    If Not InSet(ch, "and", "or", "xor", "like", "between", "mod", "+", "-", "*", "/", "<", "<=", "<>", ">", ">=", "^", "\", "&") Then Exit Do
+    If Not InSet(ch, "and", "or", "xor", "like", "between", "mod", "+", "-", "*", "/", "<", "<=", "<>", ">", ">=", "^", "\", "&", "=") Then Exit Do
     
     If IsEmpty(EvalExpression) Then EvalExpression = ToSQL(GetExpression)
     
@@ -1294,7 +1294,7 @@ Else
         Err.Raise 1003, , "Не найдена переменная с именем [" & GetValue & "]"
       End If
     Case "clr"
-      For cp = 0 To iArg - 2
+      For cp = 0 To iArg - 1
         If ParamList.exists(aArg(cp)) Then ParamList.Remove (aArg(cp))
       Next
     Case "sum"
@@ -1303,7 +1303,7 @@ Else
         ParamList(aArg(cp)) = aArg(cp + 1)
       Next
     Case "inc"
-      For cp = 0 To iArg - 2 Step 2
+      For cp = 0 To iArg - 1
         If ParamList.exists(aArg(cp)) Then ParamList(aArg(cp)) = ParamList(aArg(cp)) + 1 Else ParamList(aArg(cp)) = 1
       Next
     Case "cts"
@@ -1324,12 +1324,6 @@ Else
     Case "calc", "set"
       ParamList(vbNullString & aArg(0)) = aArg(1)
       GetValue = vbNullString & aArg(0)
-    Case "true"
-      GetValue = True
-    Case "false"
-      GetValue = False
-    Case "null"
-      GetValue = Null
     Case Else
       On Error GoTo TryAsNativeFunction
   
@@ -1358,6 +1352,12 @@ TryAsNativeFunctionEntry:
     If sFnc = "#" Then
       'Вернет номер строки самого верхнего набора данных
       GetValue = ParamList(ParamList("@SYS_CurrentRecordSet")(0) & ".rownum")
+    ElseIf sFnc = "true" Then
+      GetValue = True
+    ElseIf sFnc = "false" Then
+      GetValue = False
+    ElseIf sFnc = "null" Then
+      GetValue = Null
     ElseIf ParamList.exists(sFnc) Then           'Иначе считаем переменной и ищем в списке
       GetValue = ParamList(sFnc)
       Exit Function
