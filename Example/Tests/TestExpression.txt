@@ -1,0 +1,137 @@
+Description = Выражения. Числа
+
+Expected=&0
+Actual=%0
+@AssertEquals
+
+Expected=!0,1
+Actual=%0.1@
+@AssertEquals
+
+Expected=Decimal
+Actual=%typename(Actual)
+@AssertEquals
+
+Expected=!0,1
+Actual=%.1
+@AssertEquals
+
+Expected=&100000000
+Actual=%100000000@
+@AssertEquals
+
+Expected=!1,0
+Actual=%cdbl(1)
+@AssertEquals
+
+Expected=&1
+Actual=%cLng(1)
+@AssertEquals
+
+
+Description = Выражения. Строки
+
+Expected=TestString
+Actual=%"TestString"
+@AssertEquals
+
+Actual=%'TestString'
+@AssertEquals
+
+Actual=%`TestString`
+@AssertEquals
+
+Expected=Test"String"
+Actual=%"Test""String"""
+@AssertEquals
+
+Actual=%`Test"String"`
+@AssertEquals
+
+Expected=&52
+Actual=$txt$Это длинный текст
+Продолжение текста с новой строки
+$txt$
+Actual=%Len(Actual)
+@AssertEquals
+
+
+
+Description = Выражения. Даты
+
+Expected=#01.12.2024 20:21:22
+Actual=%cDate("01.12.2024 20:21:22")
+@AssertEquals
+
+Actual=%#01/12/2024 20:21:22#
+@AssertEquals
+
+Description = Выражения. Boolean
+
+Expected=%1=1
+Actual=%True
+@AssertEquals
+
+'Переделать тест в SQL true - integer
+'Expected=Boolean
+'Actual=%True
+'Actual=%typename(Actual)
+'@AssertEquals
+
+Expected=%1=0
+Actual=%False
+@AssertEquals
+
+'Переделать тест в SQL true - integer
+'Expected=Boolean
+'Actual=%False
+'Actual=%typename(Actual)
+'@AssertEquals
+
+
+Description = Выражения. Null
+
+Expected=%True
+Actual=%Null
+Actual=%isNull(Actual)
+@AssertEquals
+
+
+Description = Выражения. Встроенные функции. Работа с переменными.
+
+Expected = &123
+Actual =%rel("Expe" & "cted")
+@AssertEquals
+
+Expected = &123
+Actual=&0
+Dummy = %set("Actu" & "al", cInt("123"))
+@AssertEquals
+
+Expected = &123
+Actual = &122
+Dummy = %inc(`Actual`)
+@AssertEquals
+
+Expected = &123
+Actual = &120
+Dummy = %sum(`Actual`, 3)
+@AssertEquals
+
+Dummy = %sum(`Actual`, Null)
+@AssertEquals
+
+Expected = &123
+Actual = &122
+Dummy = %CTS(`Actual`, "Test")
+@AssertEquals
+
+Dummy = %CTS(`Actual`, Null)
+@AssertEquals
+
+Expected = &1
+Actual = &122
+Dummy = %clr(`Actual`)
+Dummy = %Inc(`Actual`)
+@AssertEquals
+

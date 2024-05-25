@@ -1,0 +1,9 @@
+*.vb working-tree-encoding=CP1251 eol=CRLF
+*.bas working-tree-encoding=CP1251 eol=CRLF
+<<<<<<< HEAD
+=======
+*.ahk working-tree-encoding=CP1251 eol=CRLF
+*.vbs working-tree-encoding=CP1251 eol=CRLF
+*.txt working-tree-encoding=CP1251 eol=CRLF
+*.bat working-tree-encoding=CP1251 eol=CRLF
+>>>>>>> 202904e7279af7ae414dcca2fbd0a2620017775f
