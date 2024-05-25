@@ -3,7 +3,7 @@ Option Explicit
 '@Ignore ProcedureNotUsed
 
 ' Модуль генерации отчетов в формате RTF из шаблона
-' Версия 1.1. 2022 год
+' Версия 2.0. 2024 год
 ' Больше информации на странице https://github.com/VASilaev/rtfreport
 
 Const cReportTable As String = "t_rep"
@@ -99,14 +99,17 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
 
   Dim fso
   Dim tf                                         'As TextStream
-  Dim asTemplate, i As Integer
+  Dim asTemplate, i As Variant
   Dim sPathOrig As String, sExtension As String
 
   Set fso = CreateObject("scripting.FileSystemObject")
  
   If dic Is Nothing Then
-    Set dic = CreateObject("Scripting.Dictionary")
-    dic.CompareMode = 1
+    If GlobalContext Is Nothing Then
+      Set GlobalContext = CreateObject("Scripting.Dictionary")
+      GlobalContext.CompareMode = 1
+    End If
+    Set dic = GlobalContext
   End If
 
   If IsNumeric(vReport) Then
@@ -502,8 +505,13 @@ Function RemoveTag(ByRef rtf As String, ByVal tag As String) As String
    
     ep = tp + 1
     SkipBlock RemoveTag, ep
+    
+    'Сдвинем курсор в случае если перевод строки, он не влияет не рендер
+    Do While InSet(Mid(RemoveTag, ep, 1), vbCr, vbLf)
+      ep = ep + 1
+    Loop
  
-    If Mid(rtf, tp - 1, 1) <> " " And Not InSet(Mid(RemoveTag, ep), " ", "\", "{", "}") Then sSpace = " " Else sSpace = vbNullString
+    If Mid(rtf, tp - 1, 1) <> " " And Not InSet(Mid(RemoveTag, ep, 1), " ", "\", "{", "}") Then sSpace = " " Else sSpace = vbNullString
 
     RemoveTag = Mid(RemoveTag, 1, tp - 1) & sSpace & Mid(RemoveTag, ep)
     tp = InStr(1, RemoveTag, tag, vbTextCompare)
@@ -591,20 +599,10 @@ Public Function PrepareRTF(ByRef sFile As String) As String
   re.IgnoreCase = True
   re.Global = True
  
-  'Удалим историю редактирования
-  re.Pattern = "( |\r\n)?\\pararsid\d+"
+ 'Удалим историю редактирования
+  re.Pattern = "( | ?\r\n)?\\(pararsid|insrsid|charrsid|sectrsid|styrsid|tblrsid)\d+"
   ts = re.Replace(ts, vbNullString)
-  re.Pattern = "( |\r\n)?\\insrsid\d+"
-  ts = re.Replace(ts, vbNullString)
-  re.Pattern = "( |\r\n)?\\charrsid\d+"
-  ts = re.Replace(ts, vbNullString)
-  re.Pattern = "( |\r\n)?\\sectrsid\d+"
-  ts = re.Replace(ts, vbNullString)
-  re.Pattern = "( |\r\n)?\\styrsid\d+"
-  ts = re.Replace(ts, vbNullString)
-  re.Pattern = "( |\r\n)?\\tblrsid\d+"
-  ts = re.Replace(ts, vbNullString)
- 
+  
   'Удалим лишние плюшки WORD
   ts = RemoveTag(ts, "{\*\themedata")
   ts = RemoveTag(ts, "{\*\colorschememapping")
@@ -615,6 +613,7 @@ Public Function PrepareRTF(ByRef sFile As String) As String
   ts = RemoveTag(ts, "{\*\panose")
   ts = RemoveTag(ts, "{\*\blipuid")
   ts = RemoveTag(ts, "{\nonshppict")
+  ts = RemoveTag(ts, "{\info")
   ts = RemoveTag(ts, "{\sp{\sn metroBlob")
 
   re.Multiline = True
@@ -1093,7 +1092,7 @@ Public Function GetValue(Formula As Variant, Optional ByRef ParamList As Variant
   Dim sErrorMsg As String
   Dim cp As Long
   Dim sFnc As String
-  Dim aArg(16) As Variant, iArg As Long
+  Dim aArg(16) As Variant
   Dim nvSP As Long
   Dim objXML, objDocElem
   Dim byteStorage() As Byte
@@ -1200,11 +1199,11 @@ Else
   If sFnc = vbNullString Then Err.Raise 1000, , "Ожидается какое либо значение."
    
   If Mid(Formula, StartPos, 1) = "(" Then        'Функция
-    iArg = 0
+    aArg(0) = 0
     StartPos = StartPos + 1                      'пропускаем (
     Do While StartPos <= Len(Formula)            'Собираем аргументы
-      aArg(iArg) = GetExpression(Formula, ParamList, StartPos)
-      iArg = iArg + 1
+      aArg(0) = aArg(0) + 1
+      aArg(aArg(0)) = GetExpression(Formula, ParamList, StartPos)
       
       sCurrentChar = Mid(Formula, StartPos, 1)
       Do While sCurrentChar = " "
@@ -1229,26 +1228,30 @@ Else
     Case "open"
       Dim objStream, fso
       Set fso = CreateObject("scripting.FileSystemObject")
-    
-      If Left(aArg(0), 2) = ".\" Then aArg(0) = GetPath(CurrentDb.Name) & Mid(aArg(0), 3)
-    
-      If Not fso.FileExists(aArg(0)) Then
-        GetValue = "Файл '" & aArg(0) & "' не найден."
+      
+      If aArg(0) = 0 Then
+        GetValue = "Требуется имя файла"
       Else
+        If Left(aArg(1), 2) = ".\" Then aArg(1) = GetPath(CurrentDb.Name) & Mid(aArg(1), 3)
       
-        Set objStream = CreateObject("ADODB.Stream")
-        If aArg(1) & vbNullString <> vbNullString Then
-          objStream.Charset = aArg(1)
-          objStream.Type = 2                     'adTypeText
+        If Not fso.FileExists(aArg(1)) Then
+          GetValue = "Файл '" & aArg(1) & "' не найден."
         Else
-          objStream.Type = 1                     ' adTypeBinary
+        
+          Set objStream = CreateObject("ADODB.Stream")
+          If aArg(2) & vbNullString <> vbNullString Then
+            objStream.Charset = aArg(2)
+            objStream.Type = 2                     'adTypeText
+          Else
+            objStream.Type = 1                     ' adTypeBinary
+          End If
+        
+          objStream.Open
+        
+          objStream.LoadFromFile (aArg(1))
+          GetValue = objStream.Read()
+          Set objStream = Nothing
         End If
-      
-        objStream.Open
-      
-        objStream.LoadFromFile (aArg(0))
-        GetValue = objStream.Read()
-        Set objStream = Nothing
       End If
       Set fso = Nothing
     Case "attach"                                ' 1 параметр - это поле attachment, второе поле - это маска поиска
@@ -1259,14 +1262,14 @@ Else
       objRegExp.IgnoreCase = True
       objRegExp.Multiline = False
       'Фильтр по умолчанию настроен на картинки
-      If aArg(1) <> vbNullString Then objRegExp.Pattern = aArg(1) Else objRegExp.Pattern = ".+\.(jpg|jpeg|png|emf)$"
+      If aArg(2) <> vbNullString Then objRegExp.Pattern = aArg(2) Else objRegExp.Pattern = ".+\.(jpg|jpeg|png|emf)$"
     
-      For Each FileName In aArg(0)(0).Keys
+      For Each FileName In aArg(1)(0).Keys
         If objRegExp.test(FileName) Then
           Set objXML = CreateObject("MSXml2.DOMDocument")
           Set objDocElem = objXML.createElement("Base64Data")
           objDocElem.DataType = "bin.hex"
-          objDocElem.nodeTypedValue = aArg(0)(0)(FileName)
+          objDocElem.nodeTypedValue = aArg(1)(0)(FileName)
           objDocElem.Text = Mid(objDocElem.Text, 41)
           GetValue = objDocElem.nodeTypedValue
           Set objDocElem = Nothing
@@ -1275,18 +1278,18 @@ Else
         End If
       Next
     Case "rtfimg"
-      If IsNull(aArg(0)) Or IsEmpty(aArg(0)) Then
+      If aArg(0) = 0 Or IsNull(aArg(1)) Or IsEmpty(aArg(1)) Then
         GetValue = vbNullString
-      ElseIf LCase(TypeName(aArg(0))) <> "byte()" Then
-        GetValue = "{Здесь должно быть изображение: " & aArg(0) & "}"
+      ElseIf LCase(TypeName(aArg(1))) <> "byte()" Then
+        GetValue = "{Здесь должно быть изображение: " & aArg(1) & "}"
       Else
-        byteStorage = aArg(0)
-        GetValue = PictureDataToRTF(byteStorage, aArg(1), aArg(2))
+        byteStorage = aArg(1)
+        GetValue = PictureDataToRTF(byteStorage, aArg(2), aArg(3))
       End If
     Case "fmt"
-      GetValue = FormatString(CStr(aArg(0)), ParamList)
+      GetValue = FormatString(CStr(aArg(1)), ParamList)
     Case "rel"
-      GetValue = Trim(aArg(0))
+      GetValue = Trim(aArg(1))
       If ParamList.exists(GetValue) Then
         GetValue = ParamList(GetValue)
         Exit Function
@@ -1294,20 +1297,20 @@ Else
         Err.Raise 1003, , "Не найдена переменная с именем [" & GetValue & "]"
       End If
     Case "clr"
-      For cp = 0 To iArg - 1
+      For cp = 1 To aArg(0)
         If ParamList.exists(aArg(cp)) Then ParamList.Remove (aArg(cp))
       Next
     Case "sum"
-      For cp = 0 To iArg - 2 Step 2
+      For cp = 1 To aArg(0) - 1 Step 2
         If ParamList.exists(aArg(cp)) Then aArg(cp + 1) = aArg(cp + 1) + ParamList(aArg(cp))
         ParamList(aArg(cp)) = aArg(cp + 1)
       Next
     Case "inc"
-      For cp = 0 To iArg - 1
+      For cp = 1 To aArg(0)
         If ParamList.exists(aArg(cp)) Then ParamList(aArg(cp)) = ParamList(aArg(cp)) + 1 Else ParamList(aArg(cp)) = 1
       Next
     Case "cts"
-      For cp = 0 To iArg - 2 Step 2
+      For cp = 1 To aArg(0) - 1 Step 2
         If IsNull(aArg(cp + 1)) Then
           aArg(cp + 1) = 0
         ElseIf IsEmpty(aArg(cp + 1)) Then
@@ -1322,8 +1325,8 @@ Else
       Next
       'дальше описываем остальные функции
     Case "calc", "set"
-      ParamList(vbNullString & aArg(0)) = aArg(1)
-      GetValue = vbNullString & aArg(0)
+      GetValue = vbNullString & aArg(1)
+      ParamList(GetValue) = aArg(2)
     Case Else
       On Error GoTo TryAsNativeFunction
   
@@ -1340,8 +1343,8 @@ TryAsNativeFunctionEntry:
       Dim sFunctionCall
   
       sFunctionCall = vbNullString
-      For cp = 0 To iArg - 1
-        If cp > 0 Then sFunctionCall = sFunctionCall & ", "
+      For cp = 1 To aArg(0)
+        If cp > 1 Then sFunctionCall = sFunctionCall & ", "
         sFunctionCall = sFunctionCall & ToSQL(aArg(cp))
       Next
       sFunctionCall = sFnc & "(" & sFunctionCall & ")"
@@ -1784,7 +1787,26 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
           Next
           Set aRecordSet(1) = CurrentForm.Form.Recordset.Clone
         Else
-          Set aRecordSet(1) = CurrentDb.OpenRecordset(sSQL)
+          sValue = LCase(GetPartFromFormula(sSQL, 1))
+          If sValue = "select" Or sValue = "transform" Or sValue = "" Then
+TryAsQuery:
+            Set aRecordSet(1) = CurrentDb.OpenRecordset(sSQL) 'Рукописный SQL
+          Else
+            'Открываем запрос как источник записей. Заполним параметры по имени.
+            Dim db As Object, qd As Object, par As Variant
+            Set db = CurrentDb
+            Set qd = db.QueryDefs(sSQL)
+            If Err Then
+              Err.Clear
+              GoTo TryAsQuery
+            End If
+            For Each par In qd.Parameters
+                par.Value = GetExpression(par.Name, dic)
+            Next
+            Set aRecordSet(1) = qd.OpenRecordset()
+            Set qd = Nothing
+            Set db = Nothing
+          End If
         End If
       
         If Err.Number <> 0 Then                            'Формируем текст ошибки
@@ -2389,9 +2411,9 @@ Public Function Code128(ByRef pParamList As Object, aArg As Variant) As String
   '#return: RTF блок
   On Error GoTo OnError:
   Dim byteStorage() As Byte, BCWidth
-  If aArg(0) <> vbNullString Then
-    byteStorage = StrConv(zebra2wmf(code128_zebra(aArg(0), 3), 2, 40, BCWidth), vbFromUnicode)
-    Code128 = PictureDataToRTF(byteStorage, aArg(1), aArg(2))
+  If aArg(0) > 0 And aArg(1) <> vbNullString Then
+    byteStorage = StrConv(zebra2wmf(code128_zebra(aArg(1), 3), 2, 40, BCWidth), vbFromUnicode)
+    Code128 = PictureDataToRTF(byteStorage, aArg(2), aArg(3))
   Else
     Code128 = Empty
   End If
@@ -2558,10 +2580,10 @@ Public Function EAN13(pParamList, aArg As Variant) As String
   On Error GoTo OnError:
 
   Dim byteStorage() As Byte, BCWidth
-  If aArg(0) <> vbNullString Then
+  If aArg(0) > 0 And aArg(1) <> vbNullString Then
   
-    byteStorage = StrConv(zebra2wmf(EAN13_zebra(aArg(0), False), 2, 40, BCWidth), vbFromUnicode)
-    EAN13 = PictureDataToRTF(byteStorage, aArg(1), aArg(2))
+    byteStorage = StrConv(zebra2wmf(EAN13_zebra(aArg(1), False), 2, 40, BCWidth), vbFromUnicode)
+    EAN13 = PictureDataToRTF(byteStorage, aArg(2), aArg(3))
   Else
     EAN13 = Empty
   End If

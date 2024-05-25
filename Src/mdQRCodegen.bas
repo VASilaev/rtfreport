@@ -1847,15 +1847,15 @@ End Function
 
 
 Public Function qrcode(pParamList, aArg As Variant) As String
-  If aArg(0) <> vbNullString Then
+  If aArg(1) = vbNullString Or aArg(0) = 0 Then
+    qrcode = Empty
+  Else
     Dim baQrCode()      As Byte
-    If QRCodegenEncode(aArg(0), baQrCode, QRCodegenEcc_LOW, 1, 40, QRCodegenMask_AUTO, True) Then
+    If QRCodegenEncode(aArg(1), baQrCode, QRCodegenEcc_LOW, 1, 40, QRCodegenMask_AUTO, True) Then
       baQrCode = StrConv(PointToWMF(baQrCode), vbFromUnicode)
-      qrcode = PictureDataToRTF(baQrCode, aArg(1), aArg(2))
+      qrcode = PictureDataToRTF(baQrCode, aArg(2), aArg(3))
     Else
       qrcode = Empty
     End If
-  Else
-    qrcode = Empty
   End If
 End Function
