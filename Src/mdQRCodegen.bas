@@ -483,8 +483,8 @@ QH:
     QRCodegenConvertToData = baOutput
 End Function
 
-Private Function HM2Pix(ByVal value As Double, ByVal lDpi As Long) As Long
-    HM2Pix = Int(value * lDpi / 2540 + 0.5)
+Private Function HM2Pix(ByVal Value As Double, ByVal lDpi As Long) As Long
+    HM2Pix = Int(Value * lDpi / 2540 + 0.5)
 End Function
 
 Public Function QRCodegenResizePicture(pPicture As IPicture, ByVal NewWidth As Long, ByVal NewHeight As Long) As StdPicture
@@ -1828,11 +1828,7 @@ Function PointToWMF(baQrCode() As Byte) As String
     Next
   Next
   KRNReport.addInArray recs, block(0, Empty) 'EOF
-<<<<<<< HEAD:mdQRCodegen.bas
-  PointToWMF = Join(recs, "")
-=======
   PointToWMF = Join(recs, vbNullString)
->>>>>>> 202904e7279af7ae414dcca2fbd0a2620017775f:Src/mdQRCodegen.bas
   largest = 0
   For Each i In recs
     If Len(i) / 2 > largest Then largest = Len(i) / 2

@@ -1860,10 +1860,15 @@ TryAsQuery:
       If FetchRow(dic) Then
         PC = CLng("&h" & Mid(ts, PC + 4, 8))
       Else
-        If aRecordSet(3) Then Application.Run aRecordSet(1)("name") & "_close", aRecordSet(1), dic Else aRecordSet(1).Close
+        Dim objRecordSet, bIsCustom
+        Set objRecordSet = aRecordSet(1)
+        bIsCustom = aRecordSet(3)
         Set aRecordSet(1) = Nothing
         aRecordSet = aRecordSet(2)
+        dic.Remove "@SYS_CurrentRecordSet"
         dic("@SYS_CurrentRecordSet") = aRecordSet
+        If bIsCustom Then Application.Run objRecordSet("name") & "_close", aRecordSet(1), dic Else objRecordSet.Close
+        
         PC = PC + 12
       End If
     
@@ -2225,7 +2230,7 @@ Public Function ToSQL(ByRef pValue As Variant)
   '#param pValue - Значение для преобразования
   Select Case VarType(pValue)
   Case vbString
-    ToSQL = "'" & Replace(pValue, "'", "''") & "'"
+    ToSQL = "'" & Replace(pValue & "", "'", "''") & "'"
   Case vbDate
     If pValue = CLng(pValue) Then
       ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy") & "#"
