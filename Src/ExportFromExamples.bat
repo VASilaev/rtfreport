@@ -8,6 +8,9 @@ $cmd$
 sFile=.\KRNReport.bas
 @ExportModule
 
+sFile=.\KRNReportExcel.bas
+@ExportModule
+
 sFile=.\KRNScripter.bas
 @ExportModule
 
