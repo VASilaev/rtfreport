@@ -291,22 +291,10 @@ End Function
 Private Function MakeReportExcel(Template, ParamList, sOutFile, bPrint)
   Dim WorkBook, Sheet
   
-  If ParamList.exists("@SYS_FncList") Then
-    ParamList("@SYS_FncList").RemoveAll
-    ParamList.Remove ("@SYS_FncList")
-  End If
-  
-  Dim FncList
-  Set FncList = CreateObject("Scripting.Dictionary")
-  FncList.CompareMode = 1
-  ParamList.Add "@SYS_FncList", FncList
-
-  'Специальные функции только для данного типа отчетов
-  ParamList("@SYS_FncList")("Cell") = "Excel_GetCellValue"
-  ParamList("@SYS_FncList")("Code128") = "Excel_Code128"
-  ParamList("@SYS_FncList")("EAN13") = "Excel_EAN13"
-  ParamList("@SYS_FncList")("img") = "Excel_Img"
-  
+  AddSpecialFunction ParamList, "Excel_GetCellValue", "Cell"
+  AddSpecialFunction ParamList, "Excel_Code128", "Code128"
+  AddSpecialFunction ParamList, "Excel_EAN13", "EAN13"
+  AddSpecialFunction ParamList, "Excel_Img", "img"
   
   Set WorkBook = CreateObject("Excel.Application").Workbooks.Open(Template)
   WorkBook.SaveAs sOutFile
@@ -350,7 +338,23 @@ Public Function Excel_GetCellValue(pParamList, aArg As Variant) As String
   End If
 End Function
 
+Private Function InsertImgIntoCell(pCell, pFilename, pWidth, pHeight, pAddParam)
+  Dim Image, vWidth
+  Set Image = pCell.Parent.Pictures.Insert(pFilename)
+  Image.Top = pCell.Top
+  Image.Left = pCell.Left
+  If IsEmpty(pWidth) Then vWidth = pCell.width Else vWidth = pWidth
+    
+  Image.ShapeRange.width = vWidth
+  
+  If IsEmpty(pHeight) Then
+    Image.ShapeRange.Height = pCell.Height
+  Else
+    Image.ShapeRange.Height = pHeight
+  End If
 
+  If Image.ShapeRange.width > vWidth Then Image.ShapeRange.width = vWidth
+End Function
 
 Public Function Excel_Code128(ByRef pParamList As Object, aArg As Variant) As String
   Excel_Code128 = vbNullString
@@ -358,23 +362,12 @@ Public Function Excel_Code128(ByRef pParamList As Object, aArg As Variant) As St
   Dim byteStorage() As Byte, BCWidth
   If aArg(0) > 0 And aArg(1) <> vbNullString Then
     byteStorage = StrConv(zebra2wmf(code128_zebra(aArg(1), 3), 2, 40, BCWidth), vbFromUnicode)
-    Dim Cell, Image, filename As String
-    Set Cell = pParamList("@SYS_CurrentCell")
+    Dim filename As String, vWidth, vHeight
     filename = "%temp%\picture.emf"
     SaveByteArray byteStorage, filename, True
-    Set Image = Cell.Parent.Pictures.Insert(filename)
-    Image.Top = Cell.Top
-    Image.Left = Cell.Left
-    If aArg(0) > 1 Then
-      Image.ShapeRange.Width = aArg(2)
-    Else
-      Image.ShapeRange.Width = Cell.Width
-    End If
-    If aArg(0) > 2 Then
-      Image.ShapeRange.Height = aArg(3)
-    Else
-      Image.ShapeRange.Height = Cell.Height
-    End If
+    If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
+    If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
+    InsertImgIntoCell pParamList("@SYS_CurrentCell"), filename, vWidth, vHeight, Empty
   End If
   
   Exit Function
@@ -388,28 +381,17 @@ End Function
 Public Function Excel_EAN13(ByRef pParamList As Object, aArg As Variant) As String
   Excel_EAN13 = vbNullString
   On Error GoTo OnError:
-  Dim byteStorage() As Byte, BCWidth
+  Dim byteStorage() As Byte, BCWidth, vWidth, vHeight
   
   
   If aArg(0) > 0 And aArg(1) <> vbNullString Then
     byteStorage = StrConv(zebra2wmf(EAN13_zebra(aArg(1), False), 2, 40, BCWidth), vbFromUnicode)
-    Dim Cell, Image, filename As String
-    Set Cell = pParamList("@SYS_CurrentCell")
+    Dim Image, filename As String
     filename = "%temp%\picture.emf"
     SaveByteArray byteStorage, filename, True
-    Set Image = Cell.Parent.Pictures.Insert(filename)
-    Image.Top = Cell.Top
-    Image.Left = Cell.Left
-    If aArg(0) > 1 Then
-      Image.ShapeRange.Width = aArg(2)
-    Else
-      Image.ShapeRange.Width = Cell.Width
-    End If
-    If aArg(0) > 2 Then
-      Image.ShapeRange.Height = aArg(3)
-    Else
-      Image.ShapeRange.Height = Cell.Height
-    End If
+    If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
+    If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
+    InsertImgIntoCell pParamList("@SYS_CurrentCell"), filename, vWidth, vHeight, Empty
   End If
   
   Exit Function
@@ -422,35 +404,32 @@ End Function
 Public Function Excel_Img(ByRef pParamList As Object, aArg As Variant) As String
   Excel_Img = vbNullString
   On Error GoTo OnError:
-  Dim byteStorage() As Byte, BCWidth, filename As String
+  Dim BCWidth, filename As String, vWidth, vHeight
   
-  If aArg(0) = 0 Or IsNull(aArg(1)) Or IsEmpty(aArg(1)) Then
+  If aArg(0) = 0 Then
+    Exit Function
+  ElseIf IsNull(aArg(1)) Or IsEmpty(aArg(1)) Then
     Exit Function
   ElseIf LCase(TypeName(aArg(1))) = "byte()" Then
-    filename = "%temp%\picture.emf"
+    filename = "%temp%\picture."
+    Dim vExt
+    vExt = LCase(GetTypeContent(aArg(1)))
+    Select Case vExt
+      Case "jpg", "png", "emf", "wmf":
+        filename = filename & vExt
+      Case Else
+        filename = filename & "unk"
+    End Select
     SaveByteArray aArg(1), filename, True
   Else
     filename = aArg(1)
     If Left(filename, 2) = ".\" Then filename = GetPath(CurrentDb.name) & Mid(filename, 3)
   End If
   
-  byteStorage = aArg(1)
-  Dim Cell, Image
-  Set Cell = pParamList("@SYS_CurrentCell")
-  Set Image = Cell.Parent.Pictures.Insert(filename)
-  Image.Top = Cell.Top
-  Image.Left = Cell.Left
-  If aArg(0) > 1 Then
-    Image.ShapeRange.Width = aArg(2)
-  Else
-    Image.ShapeRange.Width = Cell.Width
-  End If
-  If aArg(0) > 2 Then
-    Image.ShapeRange.Height = aArg(3)
-  Else
-    Image.ShapeRange.Height = Cell.Height
-  End If
-  
+  If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
+  If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
+  InsertImgIntoCell pParamList("@SYS_CurrentCell"), filename, vWidth, vHeight, Empty
+
   Exit Function
 OnError:
   Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description

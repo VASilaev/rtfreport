@@ -521,10 +521,10 @@ Public Function QRCodegenResizePicture(pPicture As IPicture, ByVal NewWidth As L
         hSrcDC = CreateCompatibleDC(0)
         hSrcPrevBmp = SelectObject(hSrcDC, pPicture.Handle)
         Call StretchBlt(hDC, 0, 0, NewWidth, NewHeight, hSrcDC, 0, 0, _
-            HM2Pix(pPicture.Width, GetDeviceCaps(hDC, LOGPIXELSX)), _
+            HM2Pix(pPicture.width, GetDeviceCaps(hDC, LOGPIXELSX)), _
             HM2Pix(pPicture.Height, GetDeviceCaps(hDC, LOGPIXELSY)), vbSrcCopy)
     Else
-        pPicture.Render CLng(hDC), 0, 0, NewWidth, NewHeight, 0, pPicture.Height, pPicture.Width, -pPicture.Height, ByVal 0
+        pPicture.Render CLng(hDC), 0, 0, NewWidth, NewHeight, 0, pPicture.Height, pPicture.width, -pPicture.Height, ByVal 0
     End If
     Call SelectObject(hDC, hPrevDib)
     hPrevDib = 0
@@ -1865,11 +1865,11 @@ Public Function qrcode(pParamList, aArg As Variant) As String
         Image.Top = Cell.Top
         Image.Left = Cell.Left
         If aArg(0) > 1 Then
-          Image.ShapeRange.Width = aArg(2)
+          Image.ShapeRange.width = aArg(2)
         ElseIf Cell.mergecells Then
-          Image.ShapeRange.Width = Cell.MergeArea.Width
+          Image.ShapeRange.width = Cell.MergeArea.width
         Else
-          Image.ShapeRange.Width = Cell.Width
+          Image.ShapeRange.width = Cell.width
         End If
         If aArg(0) > 2 Then
           Image.ShapeRange.Height = aArg(3)

@@ -37,6 +37,7 @@ Public Sub InstallReportTemplate()
     With dlgOpenFile
       .Filters.Clear
       .InitialFileName = CurrentProject.Path
+      .Filters.Add "DOCX шаблон", "*.docx", 1
       .Filters.Add "RTF шаблон", "*.rtf", 1
       .AllowMultiSelect = False
       .Title = "Выберите шаблон"
@@ -50,7 +51,7 @@ Public Sub InstallReportTemplate()
   
   
     sFilePath = ahtCommonFileOpenSave( _
-                Filter:=ahtAddFilterItem(vbNullString, "RTF шаблон", "*.rtf"), OpenFile:=True, _
+                Filter:=ahtAddFilterItem(ahtAddFilterItem(vbNullString, "RTF шаблон", "*.rtf"), "DOCX шаблон", "*.docx"), OpenFile:=True, _
                 DialogTitle:="Выберите шаблон", _
                 Flags:=ahtOFN_HIDEREADONLY)
   
@@ -178,23 +179,49 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
  
 End Sub
 
+Private Function GetDocxAsRTFTemplate(sOriginPath As String)
+  Dim word, document, sTempFileName As String, fso
+  Set fso = CreateObject("scripting.FileSystemObject")
+  Set word = CreateObject("word.application")
+  Set document = word.Documents.Open(sOriginPath, False, True, False)
+  sTempFileName = fso.GetSpecialFolder(2) & "\" & fso.GetTempName()
+  document.SaveAs2 sTempFileName, 6 'rtf
+  document.Close
+  word.Quit
+  GetDocxAsRTFTemplate = PrepareRTF(sTempFileName)
+  fso.DeleteFile sTempFileName, True
+End Function
+
+Public Function MakeReportDOCX(Template As String, ParamList, sOutFile, bPrint)
+  Dim tf, word, document, sTempFileName As String, fso
+  Set fso = CreateObject("scripting.FileSystemObject")
+  Set tf = fso.CreateTextFile(sOutFile)
+  Dim svTemplate As String
+  sTempFileName = fso.GetSpecialFolder(2) & "\" & fso.GetTempName() & ".rtf"
+  If Left(Template, 4) <> "GOTO" Then Template = GetDocxAsRTFTemplate(Template)
+  Set tf = fso.CreateTextFile(sTempFileName)
+  
+  AddSpecialFunction ParamList, "fncImageToRTF", "rtfimg"
+  
+  KRNReport.MakeReport Template, tf, ParamList
+  tf.Close
+  Set tf = Nothing
+ 
+  Set word = CreateObject("word.application")
+  Set document = word.Documents.Open(sTempFileName, False, True, False)
+  document.SaveAs2 sOutFile, 16
+  word.Visible = True
+  fso.DeleteFile sTempFileName, True
+  If bPrint Then document.PrintOut
+
+End Function
+
 Public Function MakeReportRTF(Template As String, ParamList, sOutFile, bPrint)
   Dim tf
   Set tf = CreateObject("scripting.FileSystemObject").CreateTextFile(sOutFile)
   Dim svTemplate As String
   
-  If ParamList.exists("@SYS_FncList") Then
-    ParamList("@SYS_FncList").RemoveAll
-    ParamList.Remove ("@SYS_FncList")
-  End If
-  
-  Dim FncList
-  Set FncList = CreateObject("Scripting.Dictionary")
-  FncList.CompareMode = 1
-  ParamList.Add "@SYS_FncList", FncList
-
-  'Специальные функции только для данного типа отчетов
-  ParamList("@SYS_FncList")("rtfimg") = "fncImageToRTF"
+  AddSpecialFunction ParamList, "fncImageToRTF", "rtfimg"
   
   KRNReport.MakeReport Template, tf, ParamList
   tf.Close
@@ -1457,6 +1484,7 @@ Public Function GetTemplate(ByVal idReport As Long) As Variant
       tRep.Edit
       Select Case LCase(sExtension)
       Case "rtf": tRep.Fields("clTemplate").Value = PrepareRTF(sPathOrig)
+      Case "docx": tRep.Fields("clTemplate").Value = GetDocxAsRTFTemplate(sPathOrig)
       End Select
           
       tRep.Fields("dEditTemplate").Value = objF.DateLastModified
@@ -2070,7 +2098,7 @@ Public Function GetExt(ByVal FullPath As String) As String
   If lngLastPos <> 0 Then GetExt = Right$(FullPath, Len(FullPath) - lngLastPos + 1)
 End Function
 
-Function GetTypeContent(ByRef tpData)
+Public Function GetTypeContent(ByRef tpData)
   'Определение формата изображения по его внутренней структуре. Возвращает следующие значения:
   ' {*} jpg
   ' {*} png
@@ -2912,3 +2940,34 @@ Public Sub SaveByteArray(bArr, filename As String, Optional overWriteFile As Boo
   End With
   
 End Sub
+
+
+Public Function AddSpecialFunction(ByRef ParamList, pFunctionName As String, Optional pAlias As String)
+  'Добавляет пользовательскую функцию в контекст выполнения
+  '#param ParamList - контекст выполнения, передайте Nothing что бы использовать глобальный контекст
+  '#param pFunctionName - Имя функции, должно совпадать с реальным именем функции в проекте VBA
+  '#param pAlias - Имя под которым будет доступна функции в шаблонизаторе
+  
+
+  Dim vAlias As String
+  If IsMissing(pAlias) Then vAlias = pFunctionName Else vAlias = pAlias
+  
+  If ParamList Is Nothing Then
+    If GlobalContext Is Nothing Then
+      Set GlobalContext = CreateObject("Scripting.Dictionary")
+      GlobalContext.CompareMode = 1
+    End If
+    Set ParamList = GlobalContext
+  End If
+  
+  If Not ParamList.exists("@SYS_FncList") Then
+    Dim FncList
+    Set FncList = CreateObject("Scripting.Dictionary")
+    FncList.CompareMode = 1
+    ParamList.Add "@SYS_FncList", FncList
+  End If
+  
+  If Not ParamList("@SYS_FncList").exists(pAlias) Then ParamList("@SYS_FncList")(pAlias) = pFunctionName
+  
+  Set AddSpecialFunction = ParamList
+End Function
