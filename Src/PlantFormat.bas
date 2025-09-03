@@ -297,6 +297,7 @@ End Function
 Public Sub fncExcel_FontFormatter(pRange, ParamList, pUserData)
 ' анализирует текст внутри ячейки если встречается текст заключенный в тег `<font ...>Текст<font />`, то теги вырезаются,
 ' а к тексту будет применено форматирование указанное в атрибутах открывающего текста
+  On Error GoTo OnError
 
     
     Dim tagStack As Object, cellText As String, tagStart As Long, tagEnd As Long, tagAttribs As String, Operation As Object, cleartext As String

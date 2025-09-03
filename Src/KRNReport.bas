@@ -8,8 +8,6 @@ Option Explicit
 
 Const cReportTable As String = "t_rep"
 Const StopSym As String = "(;,+-*/&^%<>= )"
-Dim PreFormatFunctionList
-
 
 Private GlobalContext As Object
 
@@ -170,8 +168,6 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
   End If
   
   On Error GoTo 0
-  
-  PreFormatFunctionList = Empty
   
   If Not IsEmpty(PluginList) Then
     Dim LoadedPlugin As Object
@@ -3041,7 +3037,7 @@ Public Function AddSpecialFunction(ByRef ParamList, pFunctionName As String, Opt
     ParamList.Add "@SYS_FncList", FncList
   End If
   
-  ParamList("@SYS_FncList")(pAlias) = pFunctionName
+  If Not ParamList("@SYS_FncList").Exists(pAlias) Then ParamList("@SYS_FncList").Add pAlias, pFunctionName
   
   Set AddSpecialFunction = ParamList
 End Function
