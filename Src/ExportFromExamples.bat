@@ -14,5 +14,11 @@ sFile=.\KRNScripter.bas
 sFile=.\mdQRCodegen.bas
 @ExportModule
 
+sFile=.\KRNReportExcel.bas
+@ExportModule
+
+sFile=.\PlantFormat.bas
+@ExportModule
+
 Save=2
 @ApplicationQuit

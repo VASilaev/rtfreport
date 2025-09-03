@@ -30,7 +30,7 @@ Public Function ModuleExist(tContext As Object)
   Dim objModule, sModuleName
   sModuleName = LCase(tContext("sModuleName"))
   For Each objModule In CurrentProject.AllModules
-    If LCase(objModule.Name) = sModuleName Then
+    If LCase(objModule.name) = sModuleName Then
         ModuleExist = True
         Exit For
     End If
@@ -101,9 +101,9 @@ Dim fso
 Set fso = CreateObject("scripting.FileSystemObject")
 
 Dim tf, nLine, sFileName, sCurrentFile
-If tContext.exists("sCurrentFileName") Then sCurrentFile = tContext("sCurrentFileName") Else sCurrentFile = Empty
+If tContext.Exists("sCurrentFileName") Then sCurrentFile = tContext("sCurrentFileName") Else sCurrentFile = Empty
 sFileName = tContext("sFileName")
-If Left(sFileName, 2) = ".\" Then sFileName = GetPath(CurrentDb.Name) & Mid(sFileName, 3)
+If Left(sFileName, 2) = ".\" Then sFileName = GetPath(CurrentDb.name) & Mid(sFileName, 3)
 tContext("sCurrentFileName") = sFileName
 tContext("Description") = fso.GetBaseName(sFileName)
 Set tf = fso.OpenTextFile(sFileName)
@@ -250,13 +250,13 @@ End Sub
 
 Public Sub FileOutput(tContext As Object, sMessage)
 'Вывод сообщений в открытый файл
-  tContext("OtputFile").Write sMessage & vbCrLf
+  tContext("OtputFile").write sMessage & vbCrLf
 End Sub
 
 Public Sub PrintSummary(tContext As Object)
 'Вывод сводной инфоромаци о пройденных тестах
   Dim sOutputProvider
-  If tContext.exists("sOutputProvider") Then sOutputProvider = tContext("sOutputProvider") Else sOutputProvider = "DebugOutput"
+  If tContext.Exists("sOutputProvider") Then sOutputProvider = tContext("sOutputProvider") Else sOutputProvider = "DebugOutput"
   
 
   If tContext("CountRuns") > 0 Then Application.Run sOutputProvider, tContext, "Запущено тестов: " & tContext("CountRuns")
@@ -298,7 +298,7 @@ End Function
 
 Public Sub OpenOutputFile(tContext As Object)
 'Открывает файл `sFile` и его объект помещается в контекст под именем `OtputFile`
-  tContext.Add "OtputFile", ResolvePath(tContext("FileSystemObject"), tContext("FileSystemObject").GetParentFolderName(CurrentDb.Name), tContext("sFile"))
+  tContext.Add "OtputFile", ResolvePath(tContext("FileSystemObject"), tContext("FileSystemObject").GetParentFolderName(CurrentDb.name), tContext("sFile"))
 End Sub
 
 Public Function RunFileFromEnv()
@@ -317,9 +317,9 @@ Public Function RunScriptFile(sFileName)
 'Запускает указанный файл на выполнение
   Dim tContext As Object, nExitWithCode As Variant
   Set tContext = InitializeScripterContext()
-  tContext("sFileName") = ResolvePath(tContext("FileSystemObject"), GetPath(CurrentDb.Name), sFileName)
+  tContext("sFileName") = ResolvePath(tContext("FileSystemObject"), GetPath(CurrentDb.name), sFileName)
   RunScript tContext
-  If tContext.exists("nExitWithCode") Then nExitWithCode = tContext("nExitWithCode") Else
+  If tContext.Exists("nExitWithCode") Then nExitWithCode = tContext("nExitWithCode") Else
   tContext.RemoveAll
   If Not IsEmpty(nExitWithCode) Then Application.Quit nExitWithCode
   RunScriptFile = True
@@ -330,9 +330,9 @@ Public Sub RunAllTest()
   Dim tContext As Object, sFile
   Set tContext = InitializeTestContext(InitializeScripterContext())
   
-  tContext.Add "OtputFile", tContext("FileSystemObject").CreateTextFile(GetPath(CurrentDb.Name) & "tests\Result.log", True)
+  tContext.Add "OtputFile", tContext("FileSystemObject").CreateTextFile(GetPath(CurrentDb.name) & "tests\Result.log", True)
   
-  For Each sFile In tContext("FileSystemObject").getfolder(GetPath(CurrentDb.Name) & "\tests").Files
+  For Each sFile In tContext("FileSystemObject").getfolder(GetPath(CurrentDb.name) & "\tests").Files
     If LCase(tContext("FileSystemObject").GetExtensionName(sFile.Path)) = "txt" Then
       tContext("sFileName") = sFile.Path
       RunScript tContext

@@ -3,13 +3,16 @@ Option Explicit
 '@Ignore ProcedureNotUsed
 
 ' Модуль генерации отчетов в формате RTF из шаблона
-' Версия 2.0. 2024 год
+' Версия 2.1. 2025 год
 ' Больше информации на странице https://github.com/VASilaev/rtfreport
 
 Const cReportTable As String = "t_rep"
 Const StopSym As String = "(;,+-*/&^%<>= )"
+Dim PreFormatFunctionList
+
 
 Private GlobalContext As Object
+
 
 Public Sub InstallRepSystem()
   'Создает необходимые таблицы. Для хранения шаблонов внутри таблицы
@@ -31,37 +34,27 @@ Public Sub InstallReportTemplate()
 
   Dim dlgOpenFile, sFileName As String, idReport, sFilePath As String, sCurPath As String
   
-#If VBA7 Then
-  
-    Set dlgOpenFile = Application.FileDialog(3)
-    With dlgOpenFile
-      .Filters.Clear
-      .InitialFileName = CurrentProject.Path
-      .Filters.Add "RTF шаблон", "*.rtf", 1
-      .AllowMultiSelect = False
-      .Title = "Выберите шаблон"
-      If (.Show = -1) And (.SelectedItems.Count > 0) Then
-        sFilePath = .SelectedItems(1)
-      End If
-    End With
-    Set dlgOpenFile = Nothing
-  
-#Else
-  
-  
-    sFilePath = ahtCommonFileOpenSave( _
-                Filter:=ahtAddFilterItem(vbNullString, "RTF шаблон", "*.rtf"), OpenFile:=True, _
-                DialogTitle:="Выберите шаблон", _
-                Flags:=ahtOFN_HIDEREADONLY)
-  
-#End If
+
+   Set dlgOpenFile = Application.FileDialog(3)
+   With dlgOpenFile
+     .Filters.Clear
+     .InitialFileName = CurrentProject.Path
+     .Filters.Add "DOCX шаблон", "*.docx", 1
+     .Filters.Add "RTF шаблон", "*.rtf", 1
+     .AllowMultiSelect = False
+     .Title = "Выберите шаблон"
+     If (.Show = -1) And (.SelectedItems.Count > 0) Then
+       sFilePath = .SelectedItems(1)
+     End If
+   End With
+   Set dlgOpenFile = Nothing
 
   sFileName = GetFile(sFilePath)
   sFileName = Mid(sFileName, 1, Len(sFileName) - Len(GetExt(sFileName)))
 
   idReport = SelectOneValue("select id from " & cReportTable & " where ucase(sCaption) = '" & sFileName & "'")
   If IsEmpty(idReport) Then
-    sCurPath = GetPath(CurrentDb.Name)
+    sCurPath = GetPath(CurrentDb.name)
     If UCase(Left(sFilePath, Len(sCurPath))) = UCase(sCurPath) Then sFilePath = "." & Mid(sFilePath, Len(sCurPath))
     CurrentDb().Execute "insert into " & cReportTable & " (sCaption, sOrignTemplate) values ('" & Replace(sFileName, "'", "''") & "','" & Replace(sFilePath, "'", "''") & "');"
     idReport = SelectOneValue("select id from " & cReportTable & " where ucase(sCaption) = '" & UCase(sFileName) & "'")
@@ -87,7 +80,7 @@ NoTable:
   IsHasRepTable = False
 End Function
 
-Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFile As String = vbNullString, Optional bPrint As Boolean = False)
+Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFile As String = vbNullString, Optional bPrint As Boolean = False, Optional PluginList As String = Empty)
   'Запускает формирование документа из шаблона
   '#param vReport: Идентификатор шаблона.
   'Если число, то ищется в таблице с сохраненными отчетами, в противном случае считается что это имя файла.
@@ -96,6 +89,7 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
   '#param dic: Словарь с окружением, можно передать nothing если явных входных параметров нет
   '#param sFile: Имя выходного файла, если его не указать то будет создан во временной папке с именем tmp_n где n - порядковый номер
   '#param bPrint: Отправить документ на печать
+  '#param PluginList: Список плагинов разделенных запятой. Плагины обычно добавляют новые функции в шаблоны.
 
   Dim fso
   Dim tf                                         'As TextStream
@@ -103,6 +97,8 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
   Dim sPathOrig As String, sExtension As String
 
   Set fso = CreateObject("scripting.FileSystemObject")
+ 
+
  
   If dic Is Nothing Then
     If GlobalContext Is Nothing Then
@@ -121,7 +117,7 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
   Else
   
     sPathOrig = vReport
-    If Left(sPathOrig, 2) = ".\" Then sPathOrig = GetPath(CurrentDb.Name) & Mid(sPathOrig, 3)
+    If Left(sPathOrig, 2) = ".\" Then sPathOrig = GetPath(CurrentDb.name) & Mid(sPathOrig, 3)
    
     sExtension = LCase(fso.GetExtensionName(sPathOrig))
    
@@ -129,6 +125,9 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
       Select Case sExtension
       Case "rtf"
         asTemplate = Array("rtf", PrepareRTF(sPathOrig))
+      Case Else
+        asTemplate = Array(sExtension, sPathOrig)
+        
       End Select
     ElseIf IsHasRepTable() Then
       i = Empty
@@ -143,7 +142,7 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
     End If
   End If
  
-  dic("Extension") = asTemplate(0)
+  dic("@SYS_Extension") = LCase(asTemplate(0))
   dic("Date") = Date
   dic("Now") = Now
   
@@ -169,26 +168,97 @@ Public Sub PrintReport(ByRef vReport, Optional ByRef dic As Object, Optional sFi
       End If
     Next
   End If
- 
+  
   On Error GoTo 0
-  Set tf = fso.CreateTextFile(sFile)
+  
+  PreFormatFunctionList = Empty
+  
+  If Not IsEmpty(PluginList) Then
+    Dim LoadedPlugin As Object
+    Set LoadedPlugin = CreateObject("Scripting.Dictionary")
+    LoadedPlugin.CompareMode = 1
+    
+    Dim sPlugin
+    For Each sPlugin In Split(PluginList, ",")
+      sPlugin = Trim(sPlugin)
+      If Len(sPlugin) > 0 Then
+        If Not LoadedPlugin.Exists(sPlugin) Then
+          If Application.Run(sPlugin & "_InitPlugin", dic) Then LoadedPlugin.Add sPlugin, True
+        End If
+      End If
+    Next
+  End If
+
+  Application.Run "MakeReport" & asTemplate(0), asTemplate(1), dic, sFile, bPrint
+ 
+End Sub
+
+Private Function GetDocxAsRTFTemplate(sOriginPath As String)
+  Dim word, document, sTempFileName As String, fso
+  Set fso = CreateObject("scripting.FileSystemObject")
+  Set word = CreateObject("word.application")
+  Set document = word.Documents.Open(sOriginPath, False, True, False)
+  sTempFileName = fso.GetSpecialFolder(2) & "\" & fso.GetTempName()
+  document.SaveAs2 sTempFileName, 6 'rtf
+  document.Close
+  word.Quit
+  GetDocxAsRTFTemplate = PrepareRTF(sTempFileName)
+  fso.DeleteFile sTempFileName, True
+End Function
+
+Public Function MakeReportDOCX(Template As String, ParamList, sOutFile, bPrint)
+  Dim tf, word, document, sTempFileName As String, fso
+  Set fso = CreateObject("scripting.FileSystemObject")
+  Set tf = fso.CreateTextFile(sOutFile)
   Dim svTemplate As String
-  svTemplate = asTemplate(1)
-  KRNReport.MakeReport svTemplate, tf, dic
+  sTempFileName = fso.GetSpecialFolder(2) & "\" & fso.GetTempName() & ".rtf"
+  If Left(Template, 4) <> "GOTO" Then Template = GetDocxAsRTFTemplate(Template)
+  Set tf = fso.CreateTextFile(sTempFileName)
+  
+  AddSpecialFunction ParamList, "fncImageToRTF", "rtfimg"
+  
+  KRNReport.MakeReport Template, tf, ParamList
   tf.Close
   Set tf = Nothing
-  Set fso = Nothing
  
-  If InSet(asTemplate(0), "rtf") Then
-    If bPrint Then
-      CreateObject("WScript.Shell").Run "winword """ & sFile & """ /q /n /mFilePrintDefault /mFileSave /mFileExit", vbNormalFocus
-    Else
-      CreateObject("WScript.Shell").Run "winword """ & sFile & """", vbNormalFocus
-    End If
-  ElseIf InSet(asTemplate(0), "txt") Then
-    CreateObject("WScript.Shell").Run "notepad """ & sFile & """", vbNormalFocus
+  Set word = CreateObject("word.application")
+  Set document = word.Documents.Open(sTempFileName, False, True, False)
+  document.SaveAs2 sOutFile, 16
+  word.Visible = True
+  fso.DeleteFile sTempFileName, True
+  If bPrint Then document.PrintOut
+
+End Function
+
+Public Function MakeReportRTF(Template As String, ParamList, sOutFile, bPrint)
+  Dim tf
+  Set tf = CreateObject("scripting.FileSystemObject").CreateTextFile(sOutFile)
+  Dim svTemplate As String
+  
+  AddSpecialFunction ParamList, "fncImageToRTF", "rtfimg"
+  
+  KRNReport.MakeReport Template, tf, ParamList
+  tf.Close
+  Set tf = Nothing
+ 
+  If bPrint Then
+    CreateObject("WScript.Shell").Run "winword """ & sOutFile & """ /q /n /mFilePrintDefault /mFileSave /mFileExit", vbNormalFocus
+  Else
+    CreateObject("WScript.Shell").Run "winword """ & sOutFile & """", vbNormalFocus
   End If
-End Sub
+End Function
+
+Public Function MakeReportTXT(Template As String, ParamList, sOutFile, bPrint)
+  Dim tf
+
+  Set tf = CreateObject("scripting.FileSystemObject").CreateTextFile(sOutFile)
+  Dim svTemplate As String
+  KRNReport.MakeReport Template, tf, ParamList
+  tf.Close
+  Set tf = Nothing
+  
+  CreateObject("WScript.Shell").Run "notepad """ & sOutFile & """", vbNormalFocus
+End Function
 
 Function BuildParam(ByRef pDic As Object, ParamArray pdata())
   'Обновляет в контексте переменные
@@ -217,7 +287,9 @@ Function BuildParam(ByRef pDic As Object, ParamArray pdata())
       If IsNull(vData(0)) And IsArray(vData(1)) Then
         BuildParam pDic, Null, vData(i + 1)
       Else
-        pDic(vData(i) & vbNullString) = vData(i + 1)
+        If pDic.Exists(vData(i) & vbNullString) Then pDic.Remove (vData(i) & vbNullString)
+      
+        pDic.Add (vData(i) & vbNullString), vData(i + 1)
       End If
       i = i + 2
     Else
@@ -491,7 +563,7 @@ Debug.Print iPOS
   Loop
 End Function
 
-Function RemoveTag(ByRef rtf As String, ByVal tag As String) As String
+Function RemoveTag(ByRef rtf As String, ByVal Tag As String) As String
   'Внутренняя функция разбора RTF. Удаляет все теги с их внутренним содержимым из буфера
   '#param rtf: Буфер
   '#param tag: Удаляемый тег
@@ -499,7 +571,7 @@ Function RemoveTag(ByRef rtf As String, ByVal tag As String) As String
   Dim tp As Long, sSpace As String
   
   RemoveTag = rtf
-  tp = InStr(1, RemoveTag, tag, vbTextCompare)
+  tp = InStr(1, RemoveTag, Tag, vbTextCompare)
   Do While tp > 0
     Dim ep As Long
    
@@ -514,7 +586,7 @@ Function RemoveTag(ByRef rtf As String, ByVal tag As String) As String
     If Mid(rtf, tp - 1, 1) <> " " And Not InSet(Mid(RemoveTag, ep, 1), " ", "\", "{", "}") Then sSpace = " " Else sSpace = vbNullString
 
     RemoveTag = Mid(RemoveTag, 1, tp - 1) & sSpace & Mid(RemoveTag, ep)
-    tp = InStr(1, RemoveTag, tag, vbTextCompare)
+    tp = InStr(1, RemoveTag, Tag, vbTextCompare)
   Loop
 
 End Function
@@ -912,7 +984,7 @@ NoBool:
   End If
 End Function
 
-Private Function DumpContext(ByRef ParamList As Variant) As String
+Public Function DumpContext(ByRef ParamList As Variant) As String
   'Возвращает содержимое контекста в виде листинга
   '#param ParamList: Словарь контекста
 
@@ -922,7 +994,7 @@ Private Function DumpContext(ByRef ParamList As Variant) As String
     DumpContext = DumpContext & " Отсутствует"
   Else
     On Error Resume Next
-    For Each key In ParamList.Keys
+    For Each key In ParamList.keys
       If Not InSet(LCase(key), "%", "now", "date") Then
         If Not IsArray(ParamList(key)) Then
           DumpContext = DumpContext & vbCrLf & key & " = " & Mid(ParamList(key), 1, 128) & IIf(Len(ParamList(key)) > 128, "...", vbNullString)
@@ -1082,8 +1154,39 @@ Public Function GetPartFromFormula(Formula As Variant, ByRef StartPos As Long)
   Do While Mid(Formula, StartPos, 1) = " ": StartPos = StartPos + 1: Loop
 End Function
 
+
+Public Function GetFileAsBytes(sFileName As Variant, Optional sCharset As Variant = vbNullString)
+  
+  Dim objStream, fso
+  Set fso = CreateObject("scripting.FileSystemObject")
+  
+  If Left(sFileName, 2) = ".\" Then sFileName = GetPath(CurrentDb.name) & Mid(sFileName, 3)
+
+  If Not fso.FileExists(sFileName) Then
+    GetFileAsBytes = "Файл '" & sFileName & "' не найден."
+  Else
+  
+    Set objStream = CreateObject("ADODB.Stream")
+    If sCharset & "" <> "" Then
+      objStream.Charset = sCharset
+      objStream.Type = 2                     'adTypeText
+    Else
+      objStream.Type = 1                     ' adTypeBinary
+    End If
+  
+    objStream.Open
+  
+    objStream.LoadFromFile (sFileName)
+    GetFileAsBytes = objStream.Read()
+    Set objStream = Nothing
+  End If
+  Set fso = Nothing
+End Function
+
+
+
 Public Function GetValue(Formula As Variant, Optional ByRef ParamList As Variant = Nothing, Optional ByRef StartPos As Long = 1) As Variant
-  'Внутренняя функция для формирования отчета. Разбирает один атом варыжения и возвращает его значение. Строки задаются в двойных ковычках.
+  'Внутренняя функция для формирования отчета. Разбирает один атом варажения и возвращает его значение. Строки задаются в двойных ковычках.
   'Значения переменных должны находиться в текущем контексте или находиться при помощи функции eval. Стартовые пробелы пропускаются.
   'Для получения более подробной информации см. справку.
   '#param Formula: Текст выражения
@@ -1196,66 +1299,61 @@ Else
   sFnc = vbNullString
   sFnc = Trim(GetPartFromFormula(Formula, StartPos))
    
-  If sFnc = vbNullString Then Err.Raise 1000, , "Ожидается какое либо значение."
-   
-  If Mid(Formula, StartPos, 1) = "(" Then        'Функция
+  If sFnc = vbNullString Then 'Err.Raise 1000, , "Ожидается какое либо значение."
+    GetValue = Empty
+  ElseIf Mid(Formula, StartPos, 1) = "(" Then        'Функция
     aArg(0) = 0
     StartPos = StartPos + 1                      'пропускаем (
-    Do While StartPos <= Len(Formula)            'Собираем аргументы
-      aArg(0) = aArg(0) + 1
-      aArg(aArg(0)) = GetExpression(Formula, ParamList, StartPos)
-      
+    
+    sCurrentChar = Mid(Formula, StartPos, 1)
+    Do While sCurrentChar = " "
+      StartPos = StartPos + 1
       sCurrentChar = Mid(Formula, StartPos, 1)
-      Do While sCurrentChar = " "
-        StartPos = StartPos + 1
-        sCurrentChar = Mid(Formula, StartPos, 1)
-      Loop
-  
-      If sCurrentChar = ")" Then
-        StartPos = StartPos + 1
-        Exit Do
-      ElseIf (Mid(Formula, StartPos, 1) = ";" Or Mid(Formula, StartPos, 1) = ",") Then
-        StartPos = StartPos + 1                  ' пропускаем точку с запятой
-      Else
-        Err.Raise 1000, , "Ожидается разделитель ; или ,"
-      End If
     Loop
+    
+    If sCurrentChar = ")" Then
+      StartPos = StartPos + 1
+    Else
+      Do While StartPos <= Len(Formula)            'Собираем аргументы
+      
+  
+        aArg(0) = aArg(0) + 1
+        aArg(aArg(0)) = GetExpression(Formula, ParamList, StartPos)
+        
+        sCurrentChar = Mid(Formula, StartPos, 1)
+        Do While sCurrentChar = " "
+          StartPos = StartPos + 1
+          sCurrentChar = Mid(Formula, StartPos, 1)
+        Loop
+    
+        If sCurrentChar = ")" Then
+          StartPos = StartPos + 1
+          Exit Do
+        ElseIf (Mid(Formula, StartPos, 1) = ";" Or Mid(Formula, StartPos, 1) = ",") Then
+          StartPos = StartPos + 1                  ' пропускаем точку с запятой
+          'aArg(aArg(0)) = Empty
+        Else
+          Err.Raise 1000, , "Ожидается разделитель ; или ,"
+        End If
+      Loop
+      
+    End If
+    
+
       
       
   
     Select Case LCase(sFnc)
 
     Case "open"
-      Dim objStream, fso
-      Set fso = CreateObject("scripting.FileSystemObject")
-      
       If aArg(0) = 0 Then
         GetValue = "Требуется имя файла"
       Else
-        If Left(aArg(1), 2) = ".\" Then aArg(1) = GetPath(CurrentDb.Name) & Mid(aArg(1), 3)
-      
-        If Not fso.FileExists(aArg(1)) Then
-          GetValue = "Файл '" & aArg(1) & "' не найден."
-        Else
-        
-          Set objStream = CreateObject("ADODB.Stream")
-          If aArg(2) & vbNullString <> vbNullString Then
-            objStream.Charset = aArg(2)
-            objStream.Type = 2                     'adTypeText
-          Else
-            objStream.Type = 1                     ' adTypeBinary
-          End If
-        
-          objStream.Open
-        
-          objStream.LoadFromFile (aArg(1))
-          GetValue = objStream.Read()
-          Set objStream = Nothing
-        End If
+        GetValue = GetFileAsBytes(aArg(1), aArg(2))
       End If
-      Set fso = Nothing
+
     Case "attach"                                ' 1 параметр - это поле attachment, второе поле - это маска поиска
-      Dim objRegExp As Object, FileName As Variant
+      Dim objRegExp As Object, filename As Variant
     
       Set objRegExp = CreateObject("VBScript.RegExp")
       objRegExp.Global = False
@@ -1264,12 +1362,12 @@ Else
       'Фильтр по умолчанию настроен на картинки
       If aArg(2) <> vbNullString Then objRegExp.Pattern = aArg(2) Else objRegExp.Pattern = ".+\.(jpg|jpeg|png|emf)$"
     
-      For Each FileName In aArg(1)(0).Keys
-        If objRegExp.test(FileName) Then
+      For Each filename In aArg(1)(0).keys
+        If objRegExp.test(filename) Then
           Set objXML = CreateObject("MSXml2.DOMDocument")
           Set objDocElem = objXML.createElement("Base64Data")
           objDocElem.DataType = "bin.hex"
-          objDocElem.nodeTypedValue = aArg(1)(0)(FileName)
+          objDocElem.nodeTypedValue = aArg(1)(0)(filename)
           objDocElem.Text = Mid(objDocElem.Text, 41)
           GetValue = objDocElem.nodeTypedValue
           Set objDocElem = Nothing
@@ -1277,20 +1375,11 @@ Else
           Exit For
         End If
       Next
-    Case "rtfimg"
-      If aArg(0) = 0 Or IsNull(aArg(1)) Or IsEmpty(aArg(1)) Then
-        GetValue = vbNullString
-      ElseIf LCase(TypeName(aArg(1))) <> "byte()" Then
-        GetValue = "{Здесь должно быть изображение: " & aArg(1) & "}"
-      Else
-        byteStorage = aArg(1)
-        GetValue = PictureDataToRTF(byteStorage, aArg(2), aArg(3))
-      End If
     Case "fmt"
       GetValue = FormatString(CStr(aArg(1)), ParamList)
     Case "rel"
       GetValue = Trim(aArg(1))
-      If ParamList.exists(GetValue) Then
+      If ParamList.Exists(GetValue) Then
         GetValue = ParamList(GetValue)
         Exit Function
       Else
@@ -1298,16 +1387,16 @@ Else
       End If
     Case "clr"
       For cp = 1 To aArg(0)
-        If ParamList.exists(aArg(cp)) Then ParamList.Remove (aArg(cp))
+        If ParamList.Exists(aArg(cp)) Then ParamList.Remove (aArg(cp))
       Next
     Case "sum"
       For cp = 1 To aArg(0) - 1 Step 2
-        If ParamList.exists(aArg(cp)) Then aArg(cp + 1) = aArg(cp + 1) + ParamList(aArg(cp))
+        If ParamList.Exists(aArg(cp)) Then aArg(cp + 1) = aArg(cp + 1) + ParamList(aArg(cp))
         ParamList(aArg(cp)) = aArg(cp + 1)
       Next
     Case "inc"
       For cp = 1 To aArg(0)
-        If ParamList.exists(aArg(cp)) Then ParamList(aArg(cp)) = ParamList(aArg(cp)) + 1 Else ParamList(aArg(cp)) = 1
+        If ParamList.Exists(aArg(cp)) Then ParamList(aArg(cp)) = ParamList(aArg(cp)) + 1 Else ParamList(aArg(cp)) = 1
       Next
     Case "cts"
       For cp = 1 To aArg(0) - 1 Step 2
@@ -1320,7 +1409,7 @@ Else
         Else
           aArg(cp + 1) = 1
         End If
-        If ParamList.exists(aArg(cp)) Then aArg(cp + 1) = aArg(cp + 1) + ParamList(aArg(cp))
+        If ParamList.Exists(aArg(cp)) Then aArg(cp + 1) = aArg(cp + 1) + ParamList(aArg(cp))
         ParamList(aArg(cp)) = aArg(cp + 1)
       Next
       'дальше описываем остальные функции
@@ -1328,8 +1417,16 @@ Else
       GetValue = vbNullString & aArg(1)
       ParamList(GetValue) = aArg(2)
     Case Else
+      'Специальные алиасы функций доступные только для конкретного сервера печати
+      If ParamList.Exists("@SYS_FncList") Then
+        If ParamList("@SYS_FncList").Exists(sFnc) Then
+          GetValue = Application.Run(ParamList("@SYS_FncList")(sFnc), ParamList, aArg)
+          Exit Function
+        End If
+      End If
+      
       On Error GoTo TryAsNativeFunction
-  
+
       GetValue = Application.Run(sFnc, ParamList, aArg)
       If Err.Number <> 0 Then
         sErrorMsg = "Ошибка в формуле {" & Formula & "} в позиции " & nvSP & "." & vbCrLf & "[" & Err.Number & "]" & Err.Description
@@ -1352,6 +1449,8 @@ TryAsNativeFunctionEntry:
       GetValue = Application.Eval(sFunctionCall)
     End Select
   Else
+    
+  
     If sFnc = "#" Then
       'Вернет номер строки самого верхнего набора данных
       GetValue = ParamList(ParamList("@SYS_CurrentRecordSet")(0) & ".rownum")
@@ -1361,12 +1460,14 @@ TryAsNativeFunctionEntry:
       GetValue = False
     ElseIf sFnc = "null" Then
       GetValue = Null
-    ElseIf ParamList.exists(sFnc) Then           'Иначе считаем переменной и ищем в списке
+    ElseIf ParamList.Exists(sFnc) Then           'Иначе считаем переменной и ищем в списке
       GetValue = ParamList(sFnc)
       Exit Function
-    ElseIf ParamList.exists(Replace(Replace(sFnc, "[", vbNullString), "]", vbNullString)) Then 'Иначе считаем переменной и ищем в списке
+    ElseIf ParamList.Exists(Replace(Replace(sFnc, "[", vbNullString), "]", vbNullString)) Then 'Иначе считаем переменной и ищем в списке
       GetValue = ParamList(Replace(Replace(sFnc, "[", vbNullString), "]", vbNullString))
       Exit Function
+    ElseIf sFnc = "vbcrlf" Then
+      GetValue = vbCrLf
     Else
       On Error GoTo ParamNotFound
       GetValue = Application.Eval(sFnc)
@@ -1415,7 +1516,7 @@ Public Function GetTemplate(ByVal idReport As Long) As Variant
   If tRep.NoMatch Then Err.Raise 1000, , "Не найден шаблон с кодом " & idReport
  
   sPathOrig = tRep("sOrignTemplate")
-  If Left(sPathOrig, 2) = ".\" Then sPathOrig = GetPath(CurrentDb.Name) & Mid(sPathOrig, 3)
+  If Left(sPathOrig, 2) = ".\" Then sPathOrig = GetPath(CurrentDb.name) & Mid(sPathOrig, 3)
   sExtension = LCase(fso.GetExtensionName(sPathOrig))
   
   If fso.FileExists(sPathOrig) Then
@@ -1425,6 +1526,7 @@ Public Function GetTemplate(ByVal idReport As Long) As Variant
       tRep.Edit
       Select Case LCase(sExtension)
       Case "rtf": tRep.Fields("clTemplate").Value = PrepareRTF(sPathOrig)
+      Case "docx": tRep.Fields("clTemplate").Value = GetDocxAsRTFTemplate(sPathOrig)
       End Select
           
       tRep.Fields("dEditTemplate").Value = objF.DateLastModified
@@ -1438,31 +1540,51 @@ Public Function GetTemplate(ByVal idReport As Long) As Variant
  
 End Function
 
-'@EntryPoint
-Function fncConvertTxtToRTF(ByRef Text As String) As String
-  'Внутренняя функция для формирования отчета. Конвертирует текст в корректный RTF блок. Если начинается с `{\*\shppict`, то оставляет как есть
-  '#param Text: Текст
 
-  Dim i As Long, ch As String
-  If LCase(Left(Text, 11)) = "{\*\shppict" Then
-    fncConvertTxtToRTF = Text                    'Не меняем
-  Else
-    fncConvertTxtToRTF = " "
-    For i = 1 To Len(Text)
-      ch = Mid(Text, i, 1)
-      Select Case Asc(ch)
-      Case 123, 125, 92                          '{}\
-        fncConvertTxtToRTF = fncConvertTxtToRTF & "\" & ch
-      Case &H0 To &HF
-        fncConvertTxtToRTF = fncConvertTxtToRTF & "\'0" & Hex(Asc(ch))
-      Case &H10 To &H1F, &H80 To &HFF
-        fncConvertTxtToRTF = fncConvertTxtToRTF & "\'" & Hex(Asc(ch))
-      Case Else
+Function fncConvertTxtToRTF(ByRef Text As String, Optional ByRef ParamList As Variant = Nothing) As String
+  'Внутренняя функция для формирования отчета. Конвертирует текст в корректный RTF блок.
+  '
+  '#param Text: Текст
+  '#param ParamList: Контекст, может использоваться в других реализациях
+
+  Dim i As Long, ch As String, j As Long, errNum As Long
+
+  fncConvertTxtToRTF = " "
+  i = 1
+  Do While i <= Len(Text)
+    ch = Mid(Text, i, 1)
+    Select Case Asc(ch)
+    Case 125, 92                          '}\
+      fncConvertTxtToRTF = fncConvertTxtToRTF & "\" & ch
+    Case 3 'END OF TEXT (ETX)
+      j = InStr(i + 1, Text, Chr(2)) 'START OF TEXT (STX)
+      If j = 0 Then j = Len(Text) + 1
+      fncConvertTxtToRTF = fncConvertTxtToRTF & Mid(Text, i + 1, j - i - 1)
+      i = j
+    Case &HD
+      If Mid(Text, i + 1, 1) = vbLf Then i = i + 1
+      fncConvertTxtToRTF = fncConvertTxtToRTF & "\par "
+    Case &H9
+      fncConvertTxtToRTF = fncConvertTxtToRTF & "\tab "
+    Case &H0 To &HF
+      fncConvertTxtToRTF = fncConvertTxtToRTF & "\'0" & Hex(Asc(ch))
+    Case &H10 To &H1F, &H80 To &HFF
+      fncConvertTxtToRTF = fncConvertTxtToRTF & "\'" & Hex(Asc(ch))
+      
+    Case Else
+      j = AscW(ch)
+      If j > 255 Or j < 0 Then
+        ' j > 32767 ???
+        fncConvertTxtToRTF = fncConvertTxtToRTF & "\u" & j & Chr(Asc(ch))
+      Else
         fncConvertTxtToRTF = fncConvertTxtToRTF & ch
-      End Select
-    Next
-  End If
+      End If
+    End Select
+    i = i + 1
+  Loop
 End Function
+
+
 
 Private Function LongFromByteArray(ByRef Arr, ByVal nOffset)
   'Считывает 32 битное целое из байтового массива
@@ -1490,78 +1612,213 @@ Private Function ByteArrayToHex(ByRef Arr)
   Set objDocElem = Nothing
 End Function
 
-Public Function PictureDataToRTF(ByVal PictureData, ByVal nWidth As Variant, ByVal nHeight As Variant)
-  'Внутренняя функция для формирования отчета. Конвертирует изображение в корректный RTF блок.
-  '#param PictureData: Байтовый массив с изображением
-  '#param nWidth: Целевая ширина картинки
-  '#param nHeight: Целевая высота картинки
-  '#raises 1010 - Исключение возникает в случае неподходящего формата изображения
-   
-  If IsNull(PictureData) Then
-    PictureDataToRTF = vbNullString
+
+Public Function fncImageToRTF(pParamList, aArg As Variant) As String
+  If aArg(0) = 0 Or IsNull(aArg(1)) Or IsEmpty(aArg(1)) Then
+    fncImageToRTF = vbNullString
   Else
-    PictureDataToRTF = "{\*\shppict{\pict"
-    
-    If Not IsNull(nWidth) Then PictureDataToRTF = PictureDataToRTF & "\picwgoal" & Int(nWidth * 56.6929133858)
-    If Not IsNull(nHeight) Then PictureDataToRTF = PictureDataToRTF & "\pichgoal" & Int(nHeight * 56.6929133858)
-    
-    
-    If PictureData(0) = &H15 And PictureData(1) = &H1C Then
-      Dim nProgID, offsProgID, sProgID
-      offsProgID = WordFromByteArray(PictureData, 14)
-      sProgID = vbNullString
-      For nProgID = WordFromByteArray(PictureData, 10) To 2 Step -1
-        sProgID = sProgID & Chr(PictureData(offsProgID))
-        offsProgID = offsProgID + 1
-      Next
-      If LCase(sProgID) = "paint.picture" Then
-        'Это работает с WordPad но не работает с WinWord
-        Dim nOffset
-        nOffset = WordFromByteArray(PictureData, 2) + 31
-        
-        If PictureData(nOffset) = &H42 And PictureData(nOffset + 1) = &H4D Then
-        
-          nOffset = nOffset + 14
-          Dim bitMapSize As Long, picw As Long, pich As Long, bits
-          bitMapSize = LongFromByteArray(PictureData, nOffset)
-          picw = LongFromByteArray(PictureData, nOffset + 4)
-          pich = LongFromByteArray(PictureData, nOffset + 8)
-          bits = WordFromByteArray(PictureData, nOffset + 14)
+    Dim PictureData() As Byte
+    Dim TmpResult
+    TmpResult = aArg(1)
+    If LCase(TypeName(aArg(1))) = "string" Then TmpResult = GetFileAsBytes(aArg(1))
+      
+    If LCase(TypeName(TmpResult)) <> "byte()" Then
+      fncImageToRTF = "{Здесь должно быть изображение"
+      If LCase(TypeName(TmpResult)) = "string" Then fncImageToRTF = fncImageToRTF & ": " & TmpResult
+      fncImageToRTF = fncImageToRTF & "}"
+    Else
+      PictureData = TmpResult
+      
+   'Внутренняя функция для формирования отчета. Конвертирует изображение в корректный RTF блок.
+    '#param PictureData: Байтовый массив с изображением
+    '#param nWidth: Целевая ширина картинки
+    '#param nHeight: Целевая высота картинки
+    '#raises 1010 - Исключение возникает в случае неподходящего формата изображения
+  
+      fncImageToRTF = Chr(3) & "{\*\shppict{\pict"
+      
+      If Not IsNull(aArg(2)) And Not IsEmpty(aArg(2)) Then fncImageToRTF = fncImageToRTF & "\picwgoal" & Int(aArg(2) * 56.6929133858)
+      If Not IsNull(aArg(3)) And Not IsEmpty(aArg(3)) Then fncImageToRTF = fncImageToRTF & "\pichgoal" & Int(aArg(3) * 56.6929133858)
+      
+      
+      If PictureData(0) = &H15 And PictureData(1) = &H1C Then
+        Dim nProgID, offsProgID, sProgID
+        offsProgID = WordFromByteArray(PictureData, 14)
+        sProgID = vbNullString
+        For nProgID = WordFromByteArray(PictureData, 10) To 2 Step -1
+          sProgID = sProgID & Chr(PictureData(offsProgID))
+          offsProgID = offsProgID + 1
+        Next
+        If LCase(sProgID) = "paint.picture" Then
+          'Это работает с WordPad но не работает с WinWord
+          Dim nOffset
+          nOffset = WordFromByteArray(PictureData, 2) + 31
           
+          If PictureData(nOffset) = &H42 And PictureData(nOffset + 1) = &H4D Then
           
-          bitMapSize = bitMapSize + (((picw * bits + 31) And (Not 31)) \ 8) * pich
-          
-          PictureDataToRTF = PictureDataToRTF & "\dibitmap0 "
-          Dim HexData As String
-          HexData = Replace(Replace(Replace(ByteArrayToHex(PictureData), " ", vbNullString), vbCr, vbNullString), vbLf, vbNullString)
-          HexData = Mid(HexData, (nOffset) * 2 + 1, (bitMapSize) * 2)
-                  
-          For nOffset = 1 To Len(HexData) Step 256
-            PictureDataToRTF = PictureDataToRTF & Mid(HexData, nOffset, 256) & vbCrLf
-          Next
-          PictureDataToRTF = PictureDataToRTF & "}}"
-          Exit Function
-          
+            nOffset = nOffset + 14
+            Dim bitMapSize As Long, picw As Long, pich As Long, bits
+            bitMapSize = LongFromByteArray(PictureData, nOffset)
+            picw = LongFromByteArray(PictureData, nOffset + 4)
+            pich = LongFromByteArray(PictureData, nOffset + 8)
+            bits = WordFromByteArray(PictureData, nOffset + 14)
+            
+            bitMapSize = bitMapSize + (((picw * bits + 31) And (Not 31)) \ 8) * pich
+            
+            fncImageToRTF = fncImageToRTF & "\dibitmap0 "
+            Dim HexData As String
+            HexData = Replace(Replace(Replace(ByteArrayToHex(PictureData), " ", vbNullString), vbCr, vbNullString), vbLf, vbNullString)
+            HexData = Mid(HexData, (nOffset) * 2 + 1, (bitMapSize) * 2)
+                    
+            For nOffset = 1 To Len(HexData) Step 256
+              fncImageToRTF = fncImageToRTF & Mid(HexData, nOffset, 256) & vbCrLf
+            Next
+            fncImageToRTF = fncImageToRTF & "}}"
+            Exit Function
+            
+          End If
         End If
+        
+        Err.Raise 1010, , "Не поддерживаемый тип OLE данных"
       End If
       
-      Err.Raise 1010, , "Не поддерживаемый тип OLE данных"
+      
+      Select Case GetTypeContent(PictureData)
+      Case "jpg": fncImageToRTF = fncImageToRTF & "\jpegblip" & vbCrLf
+      Case "png": fncImageToRTF = fncImageToRTF & "\pngblip" & vbCrLf
+      Case "emf": fncImageToRTF = fncImageToRTF & "\emfblip" & vbCrLf
+      Case "wmf": fncImageToRTF = fncImageToRTF & "\wmetafile7" & vbCrLf
+      Case Else: Err.Raise 1010, , "Не удалось определить формат изображения"
+      End Select
+      
+      fncImageToRTF = fncImageToRTF & ByteArrayToHex(PictureData) & "}}" & Chr(2)
     End If
-    
-    
-    Select Case GetTypeContent(PictureData)
-    Case "jpg": PictureDataToRTF = PictureDataToRTF & "\jpegblip" & vbCrLf
-    Case "png": PictureDataToRTF = PictureDataToRTF & "\pngblip" & vbCrLf
-    Case "emf": PictureDataToRTF = PictureDataToRTF & "\emfblip" & vbCrLf
-    Case "wmf": PictureDataToRTF = PictureDataToRTF & "\wmetafile7" & vbCrLf
-    Case Else: Err.Raise 1010, , "Не удалось определить формат изображения"
-    End Select
-    
-    PictureDataToRTF = PictureDataToRTF & ByteArrayToHex(PictureData)
   End If
-  PictureDataToRTF = PictureDataToRTF & ByteArrayToHex(PictureData) & "}}"
-
 End Function
+
+Public Sub CloseRecordsetForReport(ByRef ParamList, ByRef aRecordSet As Variant)
+  Dim objRecordSet, bIsCustom
+  Set objRecordSet = aRecordSet(1)
+  bIsCustom = aRecordSet(3)
+  Set aRecordSet(1) = Nothing
+  aRecordSet = aRecordSet(2)
+  ParamList.Remove "@SYS_CurrentRecordSet"
+  ParamList("@SYS_CurrentRecordSet") = aRecordSet
+  If bIsCustom Then
+    Application.Run objRecordSet("name") & "_close", objRecordSet, ParamList
+    If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
+  Else
+    objRecordSet.Close
+  End If
+End Sub
+
+Public Function EOFRecordsetForReport(ByRef ParamList, ByRef aRecordSet As Variant) As Boolean
+  If aRecordSet(3) Then
+    EOFRecordsetForReport = Application.Run(aRecordSet(1)("name") & "_eof", aRecordSet(1), ParamList)
+    If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
+  Else
+    EOFRecordsetForReport = aRecordSet(1).EOF
+  End If
+End Function
+
+Public Function OpenRecordsetForReport(ByVal name As String, ByVal query As String, ByRef ParamList, ByRef aRecordSet As Variant) As Boolean
+      
+  Dim sSQL As String, iTmp As Long, sErrorMsg
+  
+  iTmp = 1
+  If LCase(GetPartFromFormula(query, iTmp)) = "using" Then
+    aRecordSet = Array(name, Nothing, ParamList("@SYS_CurrentRecordSet"), True)
+    Set aRecordSet(1) = CreateObject("Scripting.Dictionary")
+    aRecordSet(1).CompareMode = 1
+    aRecordSet(1)("name") = LCase(GetPartFromFormula(query, iTmp))
+    aRecordSet(1)("alias") = name
+
+    Application.Run aRecordSet(1)("name") & "_new", aRecordSet(1), Mid(query, iTmp), ParamList
+    If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
+    
+    OpenRecordsetForReport = Application.Run(aRecordSet(1)("name") & "_eof", aRecordSet(1), ParamList)
+    If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
+  Else
+    sSQL = Trim(GetExpression(query, ParamList, 1)) 'получаем текст из шаблона
+    sSQL = FormatString(sSQL, ParamList)           'подставляем переменные
+  
+    'Новый набор данных (Имя набора, RecordSet, Родительский набор данных)
+    aRecordSet = Array(name, Empty, ParamList("@SYS_CurrentRecordSet"), False)
+  
+    On Error Resume Next
+    If Left(sSQL, 1) = "@" Then
+      Dim CurrentForm, FormName
+      CurrentForm = Empty
+      For Each FormName In Split(Trim(Mid(sSQL, 2)), ".")
+        If IsEmpty(CurrentForm) Then
+          Set CurrentForm = Forms(FormName)
+        Else
+          Set CurrentForm = CurrentForm.Form.Controls(FormName)
+        End If
+        If Err.Number <> 0 Then
+          sErrorMsg = "Ошибка при открытии курсора {" & name & "}." & vbCrLf & Err.Description
+          Err.Clear
+          On Error GoTo 0
+          sErrorMsg = sErrorMsg & vbCrLf & vbCrLf & sSQL & vbCrLf & vbCrLf & DumpContext(ParamList)
+          MsgBox sErrorMsg
+          Err.Raise 1001, , sErrorMsg
+        End If
+      Next
+      Set aRecordSet(1) = CurrentForm.Form.Recordset.Clone
+    Else
+      Dim FirstToken
+      FirstToken = LCase(GetPartFromFormula(sSQL, 1))
+      If FirstToken = "select" Or FirstToken = "transform" Or FirstToken = "" Then
+TryAsQuery:
+        Set aRecordSet(1) = CurrentDb.OpenRecordset(sSQL) 'Рукописный SQL
+      Else
+        'Открываем запрос как источник записей. Заполним параметры по имени.
+        Dim db As Object, qd As Object, par As Variant
+        Set db = CurrentDb
+        Set qd = db.QueryDefs(sSQL)
+        If Err Then
+          Err.Clear
+          GoTo TryAsQuery
+        End If
+        For Each par In qd.Parameters
+            par.Value = GetExpression(par.name, ParamList)
+        Next
+        Set aRecordSet(1) = qd.OpenRecordset()
+        Set qd = Nothing
+        Set db = Nothing
+      End If
+    End If
+  
+    If Err.Number <> 0 Then
+    'Формируем текст ошибки
+      On Error GoTo 0
+      sErrorMsg = "Ошибка при открытии курсора {" & name & "}." & vbCrLf & Err.Description
+      Err.Clear
+      sErrorMsg = sErrorMsg & vbCrLf & vbCrLf & sSQL & vbCrLf & vbCrLf & DumpContext(ParamList)
+      MsgBox sErrorMsg
+      Err.Raise 1001, , sErrorMsg
+    End If
+    On Error GoTo 0
+    OpenRecordsetForReport = aRecordSet(1).EOF
+  End If
+
+
+  If OpenRecordsetForReport Then
+    If aRecordSet(3) Then
+      Application.Run aRecordSet(1)("name") & "_close", aRecordSet(1), ParamList
+      If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
+    Else
+      aRecordSet(1).Close
+    End If
+    Set aRecordSet(1) = Nothing
+    aRecordSet = aRecordSet(2)
+  Else
+    ParamList("@SYS_CurrentRecordSet") = aRecordSet 'Если записей нет то ни чего не меняем
+    ParamList(aRecordSet(0) & ".rownum") = 0
+  End If
+End Function
+
+
 
 Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Variant = Nothing, Optional ByRef ParamList As Variant = Nothing) As String
   'Внутренняя функция для формирования отчета. Непосредственное формирование отчета по скомпилированному шаблону
@@ -1591,18 +1848,24 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
   Else
     Set dic = ParamList
   End If
+  
+
+  
+  
+  
  
   iRC = 0
  
-  If dic("extension") <> vbNullString Then
-    sfncConvert = "fncConvertTxtTo" & dic("extension")
+  If dic.Exists("@SYS_Convert") Then
+    sfncConvert = dic("@SYS_Convert")
+  ElseIf dic("@SYS_Extension") <> vbNullString Then
+    sfncConvert = "fncConvertTxtTo" & dic("@SYS_Extension")
+    On Error Resume Next
+    sValue = Application.Run(sfncConvert, vbNullString, Nothing)
+    If Err.Number <> 0 Then sfncConvert = vbNullString
+    On Error GoTo 0
   End If
- 
-  On Error Resume Next
-  sValue = Application.Run(sfncConvert, vbNullString)
-  If Err.Number <> 0 Then sfncConvert = vbNullString
-  On Error GoTo 0
-  
+   
   PC = 1
  
   '<DOC>
@@ -1623,7 +1886,7 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
       '- `S` - Строка длиной заданной в N
 
       iCnt = CLng("&h" & Mid(ts, PC + 4, 8))
-      If Not OutStream Is Nothing Then OutStream.Write Mid(ts, PC + 12, iCnt) Else MakeReport = MakeReport & Mid(ts, PC + 12, iCnt)
+      If Not OutStream Is Nothing Then OutStream.write Mid(ts, PC + 12, iCnt) Else MakeReport = MakeReport & Mid(ts, PC + 12, iCnt)
       PC = PC + iCnt + 12
     Case "PRVL"
    
@@ -1655,8 +1918,8 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
       End If
    
       sValue = Nz(sValue, vbNullString)
-      If sfncConvert <> vbNullString Then sValue = Application.Run(sfncConvert, sValue)
-      If Not OutStream Is Nothing Then OutStream.Write sValue Else MakeReport = MakeReport & sValue
+      If sfncConvert <> vbNullString Then sValue = Application.Run(sfncConvert, sValue, dic)
+      If Not OutStream Is Nothing Then OutStream.write sValue Else MakeReport = MakeReport & sValue
       PC = PC + iCnt + 7
     Case "CALC"
       '<DOC>
@@ -1743,109 +2006,13 @@ Public Function MakeReport(ByRef ts As String, Optional ByRef OutStream As Varia
       sName = Trim(GetExpression(Mid(ts, PC + 7, iCnt), dic, 1))
     
       iCnt2 = CLng("&h" & Mid(ts, PC + iCnt + 7, 4))
-    
       sValue = Mid(ts, PC + iCnt + 11, iCnt2)
-      iTmp = 1
-      sSQL = LCase(GetPartFromFormula(sValue, iTmp))
-      If sSQL = "using" Then
-        bisCustomRS = True
-        sSQL = LCase(GetPartFromFormula(sValue, iTmp))
-        aRecordSet = Array(sName, Nothing, dic("@SYS_CurrentRecordSet"), True)
       
-        Set aRecordSet(1) = CreateObject("Scripting.Dictionary")
-        aRecordSet(1).CompareMode = 1
-        aRecordSet(1)("name") = sSQL
-        aRecordSet(1)("alias") = sName
-  
-        Application.Run sSQL & "_new", aRecordSet(1), Mid(sValue, iTmp), dic
-        If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
-      Else
-        sSQL = Trim(GetExpression(sValue, dic, 1)) 'получаем текст из шаблона
-        sSQL = FormatString(sSQL, dic)           'подставляем переменные
-      
-        'Новый набор данных (Имя набора, RecordSet, Родительский набор данных)
-        aRecordSet = Array(sName, Empty, dic("@SYS_CurrentRecordSet"), False)
-      
-        On Error Resume Next
-        If Left(sSQL, 1) = "@" Then
-          Dim CurrentForm, FormName
-          CurrentForm = Empty
-          For Each FormName In Split(Trim(Mid(sSQL, 2)), ".")
-            If IsEmpty(CurrentForm) Then
-              Set CurrentForm = Forms(FormName)
-            Else
-              Set CurrentForm = CurrentForm.Form.Controls(FormName)
-            End If
-            If Err.Number <> 0 Then
-              sErrorMsg = "Ошибка при открытии курсора {" & sName & "}." & vbCrLf & Err.Description
-              Err.Clear
-              On Error GoTo 0
-              sErrorMsg = sErrorMsg & vbCrLf & vbCrLf & sSQL & vbCrLf & vbCrLf & DumpContext(ParamList)
-              MsgBox sErrorMsg
-              Err.Raise 1001, , sErrorMsg
-            End If
-          Next
-          Set aRecordSet(1) = CurrentForm.Form.Recordset.Clone
-        Else
-          sValue = LCase(GetPartFromFormula(sSQL, 1))
-          If sValue = "select" Or sValue = "transform" Or sValue = "" Then
-TryAsQuery:
-            Set aRecordSet(1) = CurrentDb.OpenRecordset(sSQL) 'Рукописный SQL
-          Else
-            'Открываем запрос как источник записей. Заполним параметры по имени.
-            Dim db As Object, qd As Object, par As Variant
-            Set db = CurrentDb
-            Set qd = db.QueryDefs(sSQL)
-            If Err Then
-              Err.Clear
-              GoTo TryAsQuery
-            End If
-            For Each par In qd.Parameters
-                par.Value = GetExpression(par.Name, dic)
-            Next
-            Set aRecordSet(1) = qd.OpenRecordset()
-            Set qd = Nothing
-            Set db = Nothing
-          End If
-        End If
-      
-        If Err.Number <> 0 Then                            'Формируем текст ошибки
-          On Error GoTo 0
-          sErrorMsg = "Ошибка при открытии курсора {" & sName & "}." & vbCrLf & Err.Description
-          Err.Clear
-          sErrorMsg = sErrorMsg & vbCrLf & vbCrLf & sSQL & vbCrLf & vbCrLf & DumpContext(ParamList)
-          MsgBox sErrorMsg
-          Err.Raise 1001, , sErrorMsg
-        End If
-        On Error GoTo 0
-        bisCustomRS = False
-      End If
-    
-    
-      Dim bEOF
-      If bisCustomRS Then
-        bEOF = Application.Run(aRecordSet(1)("name") & "_eof", aRecordSet(1), dic)
-        If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
-      Else
-        bEOF = aRecordSet(1).EOF
-      End If
-      
-      If bEOF Then
-        If bisCustomRS Then
-          Application.Run aRecordSet(1)("name") & "_close", aRecordSet(1), dic
-          If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
-        Else
-          aRecordSet(1).Close
-        End If
-        Set aRecordSet(1) = Nothing
+      If OpenRecordsetForReport(sName, sValue, dic, aRecordSet) Then
         PC = CLng("&h" & Mid(ts, PC + 11 + iCnt + iCnt2, 8))
-        aRecordSet = aRecordSet(2)
       Else
-        dic("@SYS_CurrentRecordSet") = aRecordSet 'Если записей нет то ни чего не меняем
-        dic(sName & ".rownum") = 0
         PC = PC + iCnt + 19 + iCnt2
         FetchRow dic
-     
       End If
 
     Case "NEXT"
@@ -1860,15 +2027,8 @@ TryAsQuery:
       If FetchRow(dic) Then
         PC = CLng("&h" & Mid(ts, PC + 4, 8))
       Else
-        Dim objRecordSet, bIsCustom
-        Set objRecordSet = aRecordSet(1)
-        bIsCustom = aRecordSet(3)
-        Set aRecordSet(1) = Nothing
-        aRecordSet = aRecordSet(2)
-        dic.Remove "@SYS_CurrentRecordSet"
-        dic("@SYS_CurrentRecordSet") = aRecordSet
-        If bIsCustom Then Application.Run objRecordSet("name") & "_close", aRecordSet(1), dic Else objRecordSet.Close
-        
+        CloseRecordsetForReport dic, aRecordSet
+  
         PC = PC + 12
       End If
     
@@ -1898,7 +2058,7 @@ TryAsQuery:
         'Очиcтим все переменные с указанным префиксом
         sValue = UCase(sValue & ".")
         l = Len(sValue)
-        For Each sKey In dic.Keys()
+        For Each sKey In dic.keys()
           If UCase(Mid(sKey, 1, l)) = sValue Then
             If UCase(sKey) <> sValue & "EOF" Then dic(sKey) = Empty
           End If
@@ -1959,10 +2119,10 @@ Public Function FetchRow(ByRef pDic, Optional ByVal pCursorName As String = vbNu
             vFiles.Close
             Set vFiles = Nothing
             
-            pDic(vCursorName & "." & fld.Name) = Array(tmpdic)
+            pDic(vCursorName & "." & fld.name) = Array(tmpdic)
           End If
         Else
-          pDic(vCursorName & "." & fld.Name) = fld.Value
+          pDic(vCursorName & "." & fld.name) = fld.Value
         End If
       Next
       vRecordSet.MoveNext
@@ -2011,7 +2171,7 @@ Public Function GetExt(ByVal FullPath As String) As String
   If lngLastPos <> 0 Then GetExt = Right$(FullPath, Len(FullPath) - lngLastPos + 1)
 End Function
 
-Function GetTypeContent(ByRef tpData)
+Public Function GetTypeContent(ByRef tpData)
   'Определение формата изображения по его внутренней структуре. Возвращает следующие значения:
   ' {*} jpg
   ' {*} png
@@ -2130,7 +2290,7 @@ Function FormatString(ByRef Text As String, Optional ByRef ParamList As Variant 
         If Mid(smid, i, 1) = "," Or Mid(smid, i, 1) = ";" Then
           i = i + 1
           sField = GetPartFromFormula(smid, i)
-          If sField <> vbNullString And sFilter <> vbNullString And vParams.exists(sFilter & ".oper") And vParams.exists(sFilter) Then
+          If sField <> vbNullString And sFilter <> vbNullString And vParams.Exists(sFilter & ".oper") And vParams.Exists(sFilter) Then
             sOperator = UCase(Trim(vParams(sFilter & ".oper")))
             vValue = vParams(sFilter)
             If Not IsArray(vValue) Then vValue = Array(vValue)
@@ -2150,7 +2310,7 @@ Function FormatString(ByRef Text As String, Optional ByRef ParamList As Variant 
               smid = " AND " & ToSQL(vValue(0)) & IIf(sOperator = "BTW" Or sOperator = "BTWWR", "<=", "<") & sField & _
                      " AND " & sField & IIf(sOperator = "BTW" Or sOperator = "BTWWL", "<=", "<") & ToSQL(vValue(1))
             Else
-              If vParams.exists("%") Then sAny = vParams("%") Else sAny = "%"
+              If vParams.Exists("%") Then sAny = vParams("%") Else sAny = "%"
               Select Case sOperator
               Case "EQ": smid = " AND " & sField & " = " & ToSQL(vValue(0))
               Case "NE": smid = " AND " & sField & " <> " & ToSQL(vValue(0))
@@ -2418,9 +2578,9 @@ Public Function Code128(ByRef pParamList As Object, aArg As Variant) As String
   Dim byteStorage() As Byte, BCWidth
   If aArg(0) > 0 And aArg(1) <> vbNullString Then
     byteStorage = StrConv(zebra2wmf(code128_zebra(aArg(1), 3), 2, 40, BCWidth), vbFromUnicode)
-    Code128 = PictureDataToRTF(byteStorage, aArg(2), aArg(3))
+    Code128 = fncImageToRTF(pParamList, Array(3, byteStorage, aArg(2), aArg(3)))
   Else
-    Code128 = Empty
+    Code128 = vbNullString
   End If
   
   Exit Function
@@ -2588,7 +2748,7 @@ Public Function EAN13(pParamList, aArg As Variant) As String
   If aArg(0) > 0 And aArg(1) <> vbNullString Then
   
     byteStorage = StrConv(zebra2wmf(EAN13_zebra(aArg(1), False), 2, 40, BCWidth), vbFromUnicode)
-    EAN13 = PictureDataToRTF(byteStorage, aArg(2), aArg(3))
+    EAN13 = fncImageToRTF(pParamList, Array(3, byteStorage, aArg(2), aArg(3)))
   Else
     EAN13 = Empty
   End If
@@ -2837,3 +2997,51 @@ OnError:
 End Sub
 
 'SUBBLOCK_END
+
+
+
+
+Public Sub SaveByteArray(bArr, filename As String, Optional overWriteFile As Boolean)
+  If InStr(filename, "%") > 0 Then filename = CreateObject("WScript.Shell").ExpandEnvironmentStrings(filename)
+
+  With CreateObject("ADODB.Stream")
+    .Open
+    .Type = 1
+    .write bArr
+    .SaveToFile filename, IIf(overWriteFile, 2, 1)
+    .Close
+  End With
+  
+End Sub
+
+
+Public Function AddSpecialFunction(ByRef ParamList, pFunctionName As String, Optional pAlias As String)
+  'Добавляет пользовательскую функцию в контекст выполнения
+  '#param ParamList - контекст выполнения, передайте Nothing что бы использовать глобальный контекст
+  '#param pFunctionName - Имя функции, должно совпадать с реальным именем функции в проекте VBA
+  '#param pAlias - Имя под которым будет доступна функции в шаблонизаторе
+  
+
+  Dim vAlias As String
+  
+  If IsMissing(pAlias) Then vAlias = pFunctionName Else vAlias = pAlias
+  
+  If ParamList Is Nothing Then
+    If GlobalContext Is Nothing Then
+      Set GlobalContext = CreateObject("Scripting.Dictionary")
+      GlobalContext.CompareMode = 1
+    End If
+    Set ParamList = GlobalContext
+  End If
+  
+  If Not ParamList.Exists("@SYS_FncList") Then
+    Dim FncList
+    Set FncList = CreateObject("Scripting.Dictionary")
+    FncList.CompareMode = 1
+    ParamList.Add "@SYS_FncList", FncList
+  End If
+  
+  ParamList("@SYS_FncList")(pAlias) = pFunctionName
+  
+  Set AddSpecialFunction = ParamList
+End Function

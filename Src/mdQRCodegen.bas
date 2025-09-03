@@ -522,9 +522,9 @@ Public Function QRCodegenResizePicture(pPicture As IPicture, ByVal NewWidth As L
         hSrcPrevBmp = SelectObject(hSrcDC, pPicture.Handle)
         Call StretchBlt(hDC, 0, 0, NewWidth, NewHeight, hSrcDC, 0, 0, _
             HM2Pix(pPicture.width, GetDeviceCaps(hDC, LOGPIXELSX)), _
-            HM2Pix(pPicture.height, GetDeviceCaps(hDC, LOGPIXELSY)), vbSrcCopy)
+            HM2Pix(pPicture.Height, GetDeviceCaps(hDC, LOGPIXELSY)), vbSrcCopy)
     Else
-        pPicture.Render CLng(hDC), 0, 0, NewWidth, NewHeight, 0, pPicture.height, pPicture.width, -pPicture.height, ByVal 0
+        pPicture.Render CLng(hDC), 0, 0, NewWidth, NewHeight, 0, pPicture.Height, pPicture.width, -pPicture.Height, ByVal 0
     End If
     Call SelectObject(hDC, hPrevDib)
     hPrevDib = 0
@@ -1852,8 +1852,36 @@ Public Function qrcode(pParamList, aArg As Variant) As String
   Else
     Dim baQrCode()      As Byte
     If QRCodegenEncode(aArg(1), baQrCode, QRCodegenEcc_LOW, 1, 40, QRCodegenMask_AUTO, True) Then
-      baQrCode = StrConv(PointToWMF(baQrCode), vbFromUnicode)
-      qrcode = PictureDataToRTF(baQrCode, aArg(2), aArg(3))
+      If pParamList("@SYS_Extension") = "rtf" Then
+        baQrCode = StrConv(PointToWMF(baQrCode), vbFromUnicode)
+        qrcode = fncImageToRTF(pParamList, Array(3, baQrCode, aArg(2), aArg(3)))
+      ElseIf InSet(pParamList("@SYS_Extension"), "xls", "xlsx", "xlsm") Then
+        baQrCode = StrConv(PointToWMF(baQrCode), vbFromUnicode)
+        Dim Cell, Image, filename As String
+        Set Cell = pParamList("@SYS_CurrentCell")
+        filename = "%temp%\picture.emf"
+        SaveByteArray baQrCode, filename, True
+        Set Image = Cell.Parent.Pictures.Insert(filename)
+        Image.Top = Cell.Top
+        Image.Left = Cell.Left
+        If aArg(0) > 1 Then
+          Image.ShapeRange.width = aArg(2)
+        ElseIf Cell.mergecells Then
+          Image.ShapeRange.width = Cell.MergeArea.width
+        Else
+          Image.ShapeRange.width = Cell.width
+        End If
+        If aArg(0) > 2 Then
+          Image.ShapeRange.Height = aArg(3)
+        ElseIf Cell.mergecells Then
+          Image.ShapeRange.Height = Cell.MergeArea.Height
+        Else
+          Image.ShapeRange.Height = Cell.Height
+        End If
+      
+      Else
+        Err.Raise 1011, , "QR код не поддерживается для документов с типом " & pParamList("@SYS_Extension")
+      End If
     Else
       qrcode = Empty
     End If
