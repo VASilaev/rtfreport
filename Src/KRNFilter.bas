@@ -1,64 +1,12 @@
-Attribute VB_Name = "KRNFilter"
 Option Compare Binary
-
-' Основная функция для санитизации имени поля
-Function SanitizeFieldName(fieldName As String) As String
-    ' Если есть ровно одна точка, разделить и обработать части
-    Dim parts() As String
-    If Left(LTrim(fieldName), 1) = "[" Then
-      SanitizeFieldName = fieldName 'Уже в нужном формате
-    Else
-      parts = Split(fieldName, ".")
-      If UBound(parts) = 1 Then  ' ровно одна точка
-          SanitizeFieldName = SanitizePart(parts(0)) & "." & SanitizePart(parts(1))
-      Else
-          ' Нет точки или больше одной, обработать как одну часть
-          SanitizeFieldName = SanitizePart(fieldName)
-      End If
-    End If
-End Function
+' Модуль для конструирования критериев условия where
+' Зависит от KRNReport, функция toSQL
 
 
-' Вспомогательная функция для обработки части имени поля
-Private Function SanitizePart(part As String) As String
-    If IsValidSQLIdentifier(part) Then
-        SanitizePart = part
-    Else
-        SanitizePart = "[" & part & "]"
-    End If
-End Function
-
-' Функция для проверки, является ли строка валидным SQL-идентификатором
-Private Function IsValidSQLIdentifier(ID As String) As Boolean
-    ' Используем регулярное выражение для проверки: начинается с буквы или _, далее буквы, цифры или _.
-    Dim regex As Object
-    Set regex = CreateObject("VBScript.RegExp")
-    regex.Pattern = "^[a-zA-Z_а-яА-Яеё][a-zA-Z0-9_а-яА-Яеё]*$"
-    IsValidSQLIdentifier = regex.test(ID) And Not IsKeyword(ID)
-End Function
-
-' Функция для проверки, является ли слово ключевым словом SQL
-Private Function IsKeyword(word As String) As Boolean
-    ' Упрощенный список ключевых слов SQL (можно расширить по необходимости)
-    Dim keyword As Variant, wordInUCase As String
-    
-    wordInUCase = UCase(word)
-    IsKeyword = False
-    
-    For Each keyword In Array("SELECT", "FROM", "WHERE", "JOIN", "GROUP", "ORDER", "BY", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "TABLE", _
-                              "COLUMN", "INDEX", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "NULL", "NOT", "AND", "OR", "IN", "LIKE", "BETWEEN", "IS", "EXISTS", _
-                              "COUNT", "SUM", "AVG", "MIN", "MAX", "AS", "ON", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "UNION", "ALL", "DISTINCT", "TOP", "WITH", _
-                              "HAVING", "CASE", "WHEN", "THEN", "ELSE", "END" _
-                             )
-      If wordInUCase = keyword Then
-        IsKeyword = True
-        Exit Function
-      End If
-    Next
-End Function
-
-' Вспомогательная функция для получения имени типа по константе
 Function GetTypeName(targetType As Integer) As String
+' Вспомогательная функция для получения имени типа по константе
+' #param targetType - тип данных
+
     Select Case targetType
         Case vbString: GetTypeName = "String"
         Case vbDate: GetTypeName = "Date"
@@ -73,11 +21,16 @@ Function GetTypeName(targetType As Integer) As String
     End Select
 End Function
 
-Public Function BetweenParse(ByRef sOperator As String, ByRef value As Variant)
+Public Function BetweenParse(ByRef sOperator As String, ByRef Value As Variant)
+'Для оператора Between преобразуетс строку в пару значений. Строка разбивается по строке " и "
+' #param sOperator - Текущий оператор, может быть изменен при работе функции
+' #param value - Строка с значение, будет преобразована в массив крайних значений, тип останется строчный
+
+
   Dim i As Long
   sOperator = UCase(sOperator)
-  If Left(Trim(value), 1) = "(" Then
-    value = Mid(LTrim(value), 2)
+  If Left(Trim(Value), 1) = "(" Then
+    Value = Mid(LTrim(Value), 2)
     If sOperator = "BTW" Then
       sOperator = "BTWWL"
     ElseIf sOperator = "BTWR" Then
@@ -85,9 +38,9 @@ Public Function BetweenParse(ByRef sOperator As String, ByRef value As Variant)
     End If
   End If
   
-  If Right(Trim(value), 1) = "(" Then
-    value = RTrim(value)
-    value = Left(value, Len(value) - 1)
+  If Right(Trim(Value), 1) = "(" Then
+    Value = RTrim(Value)
+    Value = Left(Value, Len(Value) - 1)
     If sOperator = "BTW" Then
       sOperator = "BTWWR"
     ElseIf sOperator = "BTWL" Then
@@ -95,23 +48,27 @@ Public Function BetweenParse(ByRef sOperator As String, ByRef value As Variant)
     End If
   End If
   
-  i = InStr(1, value, " и ", vbTextCompare)
+  i = InStr(1, Value, " и ", vbTextCompare)
   If i > 0 Then
-    value = Array(Left(value, i - 1), Mid(value, i + 3))
+    Value = Array(Left(Value, i - 1), Mid(Value, i + 3))
   End If
 End Function
 
-Function ConvertValueToType(value As Variant, targetType As Integer) As Variant
-    If IsArray(value) Then
+Public Function ConvertValueToType(Value As Variant, targetType As Integer) As Variant
+'Конвертирует строковое значение в указанный тип
+' #param value - Строка или массив строк
+' #param targetType - тип значения к которому нужно привести
+
+    If IsArray(Value) Then
         ' Обработка массива: рекурсивно применить преобразование к каждому элементу
         Dim newArray() As Variant
         Dim i As Long
         Dim lb As Long, ub As Long
-        lb = LBound(value)
-        ub = UBound(value)
+        lb = LBound(Value)
+        ub = UBound(Value)
         ReDim newArray(lb To ub)
         For i = lb To ub
-            newArray(i) = ConvertValueToType(value(i), targetType)
+            newArray(i) = ConvertValueToType(Value(i), targetType)
         Next i
         ConvertValueToType = newArray
     Else
@@ -119,34 +76,34 @@ Function ConvertValueToType(value As Variant, targetType As Integer) As Variant
         On Error Resume Next
         Select Case targetType
             Case vbString
-                ConvertValueToType = CStr(value)
+                ConvertValueToType = CStr(Value)
             Case vbDate
-                ConvertValueToType = CDate(value)
+                ConvertValueToType = CDate(Value)
             Case vbBoolean
-               Select Case UCase(CStr(value))
+               Select Case UCase(CStr(Value))
                    Case "ДА", "YES", "Y", "+", "1", "TRUE", "ИСТИНА"
                         ConvertValueToType = True
                    Case Else
                         ConvertValueToType = False
                End Select
             Case vbInteger
-                ConvertValueToType = CInt(value)
+                ConvertValueToType = CInt(Value)
             Case vbLong, 20
-                ConvertValueToType = CLng(value)
+                ConvertValueToType = CLng(Value)
             Case vbSingle
-                ConvertValueToType = CSng(value)
+                ConvertValueToType = CSng(Value)
             Case vbDouble
-                ConvertValueToType = CDbl(value)
+                ConvertValueToType = CDbl(Value)
             Case vbCurrency
-                ConvertValueToType = CCur(value)
+                ConvertValueToType = CCur(Value)
             Case vbDecimal
-                ConvertValueToType = CDec(value)
+                ConvertValueToType = CDec(Value)
             Case Else
                 Err.Raise 5, "ConvertValueToType", "Неподдерживаемый тип данных"
         End Select
         If Err.Number <> 0 Then
             Dim errorMsg As String
-            errorMsg = "Не удалось выполнить преобразование " & CStr(value) & " к типу " & GetTypeName(targetType)
+            errorMsg = "Не удалось выполнить преобразование " & CStr(Value) & " к типу " & GetTypeName(targetType)
             Err.Clear
             On Error GoTo 0
             Err.Raise vbObjectError + 1, "ConvertValueToType", errorMsg
@@ -155,9 +112,12 @@ Function ConvertValueToType(value As Variant, targetType As Integer) As Variant
     End If
 End Function
 
+Public Function GetFieldType(tableOrQueryName As String, fieldName As String, Optional mustFind As Boolean = False) As Integer
 ' Функция для получения типа поля в таблице или запросе Access по имени таблицы/запроса и поля
 ' Возвращает константу VBA типа (vbString, vbDate и т.д.) или вызывает ошибку, если поле/таблица/запрос не найдены
-Function GetFieldType(tableOrQueryName As String, fieldName As String) As Integer
+' #param tableOrQueryName - имя таблицы или запроса
+' #param fieldName - имя поля
+
     On Error GoTo ErrorHandler
     
     Dim db As DAO.Database
@@ -190,6 +150,8 @@ Function GetFieldType(tableOrQueryName As String, fieldName As String) As Intege
         End If
     End If
     On Error GoTo ErrorHandler
+    
+    GoTo ErrorHandler
     
     ' Если не найдено ни в таблицах, ни в запросах, ошибка
     Err.Raise vbObjectError + 1, "GetFieldType", "Таблица или запрос '" & tableOrQueryName & "' или поле '" & fieldName & "' не найдены."
@@ -236,7 +198,11 @@ ErrorHandler:
     Set tdf = Nothing
     Set qdf = Nothing
     Set db = Nothing
-    Err.Raise vbObjectError + 1, "GetFieldType", "Ошибка: таблица или запрос '" & tableOrQueryName & "' или поле '" & fieldName & "' не найдены, или произошла другая ошибка: " & Err.Description
+    If mustFind Then
+      Err.Raise vbObjectError + 1, "GetFieldType", "Ошибка: Не удалось определить тип для '" & tableOrQueryName & "." & fieldName & "'"
+    Else
+      GetFieldType = -1
+    End If
 End Function
 
 
@@ -331,50 +297,3 @@ Public Function BuildFilterClause(sField As String, ByVal sOperator As String, v
     BuildFilterClause = vbNullString
   End If
 End Function
-
-Public Function ToSQL(pValue)
-'На основе типа данных преобразует значение в SQL литерал
-'#param pValue - Значение для преобразования
-  Select Case VarType(pValue)
-    Case vbString
-      ToSQL = "'" & Replace(pValue, "'", "''") & "'"
-    Case vbDate
-      If pValue = CLng(pValue) Then
-        ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy") & "#"
-      ElseIf pValue < 1 Then
-        ToSQL = "#" & Format(pValue, "hh:nn:ss") & "#"
-      Else
-        ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy hh:nn:ss") & "#"
-      End If
-    Case vbEmpty, vbNull
-      ToSQL = "NULL"
-    Case vbBoolean
-      If pValue Then ToSQL = "true" Else ToSQL = "false"
-    Case vbInteger, vbLong, 20
-      ToSQL = pValue & ""
-    Case vbSingle, vbDouble, vbCurrency, vbDecimal
-      ToSQL = Replace(pValue & "", ",", ".")
-    'vbByte ?? char
-    Case Else
-      If IsArray(pValue) Then
-        Dim vElement
-        ToSQL = ""
-        For Each vElement In pValue
-          If Len(ToSQL) = 0 Then
-            ToSQL = ToSQL(vElement)
-          Else
-            ToSQL = ToSQL & ", " & ToSQL(vElement)
-          End If
-        Next
-        If ToSQL = "" Then ToSQL = "NULL"
-      Else
-        Err.rise 1001, , "Unsupported type of SQL value!"
-      End If
-  End Select
-End Function
-
-
-
-
-
-

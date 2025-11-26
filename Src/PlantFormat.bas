@@ -258,7 +258,7 @@ Function fncEvalTextWrapper(ByRef pParamList As Object, aArg As Variant) As Stri
   ElseIf IsNull(aArg(1)) Or IsEmpty(aArg(1)) Then
     Exit Function
   Else
-    PreFormatValue aArg(1), pParamList
+    'PreFormatValue aArg(1), pParamList
     fncEvalTextWrapper = fncEvalText(aArg(1) & "", pParamList)
   End If
   

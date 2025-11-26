@@ -1764,13 +1764,13 @@ Private Sub pvAppendLineTo(uPoints() As POINTAPI, ByVal lPos As Long, lSize As L
     lSize = lSize + 1
 End Sub
 
-Private Function pvPointsInLine(uA As POINTAPI, uB As POINTAPI, ByVal lX As Long, ByVal lY As Long) As Boolean
+Private Function pvPointsInLine(uA As POINTAPI, ub As POINTAPI, ByVal lX As Long, ByVal lY As Long) As Boolean
     If uA.x = lX Then
-        pvPointsInLine = uB.x = lX
+        pvPointsInLine = ub.x = lX
     ElseIf uA.y = lY Then
-        pvPointsInLine = uB.y = lY
+        pvPointsInLine = ub.y = lY
     Else
-        pvPointsInLine = (uA.x - lX) * (uA.y - lY) = (lX - uB.x) * (lY - uB.y)
+        pvPointsInLine = (uA.x - lX) * (uA.y - lY) = (lX - ub.x) * (lY - ub.y)
     End If
 End Function
 
