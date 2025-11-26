@@ -20,5 +20,9 @@ sFile=.\KRNReportExcel.bas
 sFile=.\PlantFormat.bas
 @ExportModule
 
+sFile=.\KRNFilter.bas
+@ExportModule
+
+
 Save=2
 @ApplicationQuit
