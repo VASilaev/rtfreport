@@ -38,7 +38,7 @@ Public Function BetweenParse(ByRef sOperator As String, ByRef Value As Variant)
     End If
   End If
   
-  If Right(Trim(Value), 1) = "(" Then
+  If Right(Trim(Value), 1) = ")" Then
     Value = RTrim(Value)
     Value = Left(Value, Len(Value) - 1)
     If sOperator = "BTW" Then
