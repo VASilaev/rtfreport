@@ -91,6 +91,18 @@ Public Function ParseTemplateFormula(ByVal sValue)
   ParseTemplateFormula = aFormula
 End Function
 
+Function ExcelColToLetter(col)
+'Преобразует номер колонки в буквенный индекс
+'#param col - Номер колонки
+  Dim temp, letter
+  temp = col
+  Do While temp > 0
+    letter = Chr(64 + (temp - 1) Mod 26 + 1) & letter
+    temp = Int((temp - 1) / 26)
+  Loop
+  ExcelColToLetter = letter
+End Function
+
 Function ExcelReportGetModel(objSheet)
 'Извлекаем с листа модель заполнения
   Dim model, workbookname, rng
@@ -211,8 +223,7 @@ ParamList("@SYS_CurrentCell_Format") = FormatterList
 End Sub
 
 Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal nRowStart = -1, Optional ByVal nRowEnd = -1)
-  
-  Dim i, j, FormulaValue, FormulaElement, aRecordSet, sErrorMsg
+  Dim i, j, FormulaValue, FormulaElement, aRecordSet, sErrorMsg, CellRange, row1, row2, col1, col2
   If nRowStart = -1 Then nRowStart = LBound(aModel)
   If nRowEnd = -1 Then nRowEnd = UBound(aModel)
   
@@ -224,7 +235,10 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
       If ParamList.Exists("@SYS_CurrentCell") Then ParamList.Remove "@SYS_CurrentCell"
       If ParamList.Exists("@SYS_CurrentCell_Format") Then ParamList.Remove "@SYS_CurrentCell_Format"
       
-      ParamList.Add "@SYS_CurrentCell", objSheet.Cells(aModel(i)(0), aModel(i)(1))
+      Set CellRange = objSheet.Cells(aModel(i)(0), aModel(i)(1))
+
+
+      ParamList.Add "@SYS_CurrentCell", CellRange
       
       For Each FormulaElement In aModel(i)(3)
         If FormulaElement(0) = 0 Then
@@ -240,11 +254,11 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
         End If
       Next
             
-      objSheet.Cells(aModel(i)(0), aModel(i)(1)).Value = FormulaValue
+      CellRange.Value = FormulaValue
       
       If ParamList.Exists("@SYS_CurrentCell_Format") Then
-        Dim FncFormatter, FormatterList, CellRange
-        Set CellRange = objSheet.Cells(aModel(i)(0), aModel(i)(1))
+        Dim FncFormatter, FormatterList
+        
         FormatterList = ParamList("@SYS_CurrentCell_Format")
         If Not IsArray(FormatterList) Then FormatterList = Array()
         
@@ -261,6 +275,8 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
         ParamList.Remove "@SYS_CurrentCell_Format"
       End If
       
+      Set CellRange = Nothing
+
       ParamList.Remove "@SYS_CurrentCell"
       
     ElseIf aModel(i)(2) = 0 Then
@@ -277,10 +293,17 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
       'OpenRecordsetForReport возвращает EOF
       If Not OpenRecordsetForReport(aModel(i)(5), aModel(i)(6), ParamList, aRecordSet) Then
         Do While FetchRow(ParamList)
+        
+          row1 = aModel(i)(0) + CurrentOffsetRow
+          row2 = row1 + aModel(i)(3) - 1
+          col1 = aModel(i)(1)
+          col2 = col1 + aModel(i)(4) - 1
+        
           If Not EOFRecordsetForReport(ParamList, aRecordSet) Then
-            objSheet.rows((aModel(i)(0) + CurrentOffsetRow) & ":" & (aModel(i)(0) + aModel(i)(3) - 1 + CurrentOffsetRow)).Select
-            objSheet.Application.selection.copy
-            objSheet.Application.selection.Insert (-4121) 'xlDown
+            Set CellRange = objSheet.rows(row1 & ":" & row2)
+            CellRange.copy
+            CellRange.Insert (-4121) 'xlDown
+            Set CellRange = Nothing
             bShift = True
           Else
             bShift = False
@@ -288,7 +311,7 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
           
           'Помещаем в контекст текущую строку
           If ParamList.Exists("@SYS_CurrentRow") Then ParamList.Remove "@SYS_CurrentRow"
-          ParamList.Add "@SYS_CurrentRow", objSheet.Range(objSheet.Cells(aModel(i)(0) + CurrentOffsetRow, aModel(i)(1)), objSheet.Cells(aModel(i)(0) + CurrentOffsetRow + aModel(i)(3) - 1, aModel(i)(1) + aModel(i)(4) - 1))
+          ParamList.Add "@SYS_CurrentRow", objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
           If ParamList.Exists("@SYS_CurrentCell") Then ParamList.Remove "@SYS_CurrentCell"
                 
           'Заполняем поля
@@ -305,8 +328,9 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
         Loop
       Else
         'Удаляем шаблон
-        objSheet.rows((aModel(i)(0) + CurrentOffsetRow) + ":" + (aModel(i)(0) + CurrentOffsetRow + aModel(i)(3) - 1)).Select
-        objSheet.selection.Delete (-4162) 'xlUp
+        row1 = aModel(i)(0)
+        row2 = row1 + aModel(i)(3) - 1
+        objSheet.rows(row1 + ":" + row2).Delete (-4162) 'xlUp
         'Сдвигаем в обратном направлении
         For j = i + 1 To UBound(aModel)
           aModel(j)(0) = aModel(j)(0) - aModel(i)(3)
@@ -321,7 +345,11 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
       If CurrentOffsetRow = 0 Then
         ParamList.Add "@SYS_PrevRecordset", Nothing
       Else
-        ParamList.Add "@SYS_PrevRecordset", objSheet.Range(objSheet.Cells(aModel(i)(0), aModel(i)(1)), objSheet.Cells(aModel(i)(0) + CurrentOffsetRow - 1, aModel(i)(1) + aModel(i)(4) - 1))
+        row1 = aModel(i)(0)
+        row2 = aModel(i)(0) + CurrentOffsetRow - 1
+        col1 = aModel(i)(1)
+        col2 = col1 + aModel(i)(4) - 1
+        ParamList.Add "@SYS_PrevRecordset", objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
       End If
       
       CloseRecordsetForReport ParamList, aRecordSet
@@ -349,15 +377,21 @@ End Function
 
 
 Private Function MakeReportExcel(Template, ParamList, sOutFile, bPrint)
-  Dim WorkBook, Sheet
+  Dim WorkBook, Sheet, Excel, sError
   
   AddSpecialFunction ParamList, "Excel_GetCellValue", "Cell"
   AddSpecialFunction ParamList, "Excel_Code128", "Code128"
   AddSpecialFunction ParamList, "Excel_EAN13", "EAN13"
   AddSpecialFunction ParamList, "Excel_Img", "img"
-  
-  Set WorkBook = CreateObject("Excel.Application").Workbooks.Open(Template)
+  Set Excel = CreateObject("Excel.Application")
+  On Error GoTo CloseExcel
+  Set WorkBook = Nothing
+  Set WorkBook = Excel.Workbooks.Open(Template)
   WorkBook.SaveAs sOutFile
+  
+  Excel.ScreenUpdating = False
+  Excel.EnableEvents = False
+  Excel.DisplayAlerts = False
   
   For Each Sheet In WorkBook.sheets
     Sheet.Activate
@@ -368,7 +402,25 @@ Private Function MakeReportExcel(Template, ParamList, sOutFile, bPrint)
     ParamList.Remove ("@SYS_CurrentSheet")
   Next
   
-  WorkBook.Application.Visible = True
+  Excel.DisplayAlerts = True
+  Excel.EnableEvents = True
+  Excel.ScreenUpdating = True
+  Excel.Visible = True
+  Exit Function
+
+ExitFunction:
+  Exit Function
+
+CloseExcel:
+  sError = Err.Description
+  Excel.DisplayAlerts = True
+  Excel.EnableEvents = True
+  Excel.ScreenUpdating = True
+  Excel.Visible = True
+  Excel.Quit
+  MsgBox "При заполнении шаблона произошла ошибка" & sError, vbCritical + vbOKOnly, "Заполнение шаблона Excel"
+  
+  Resume ExitFunction
 End Function
 
 
