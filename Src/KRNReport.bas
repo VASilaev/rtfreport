@@ -1501,7 +1501,7 @@ Public Function GetTemplate(ByVal idReport As Long) As Variant
   '#param idReport: Код шаблона
 
   Dim fso As Object, objF As Object
-  Dim tRep As Recordset
+  Dim tRep As Object
   Dim sPathOrig As String, sExtension As String
  
   Set fso = CreateObject("scripting.FileSystemObject")

@@ -7,6 +7,9 @@ Option Explicit
 ' Больше информации на странице https://github.com/VASilaev/rtfreport
 
 
+Dim CurrentCell, CurrentRow, PrevRecordset, CurrentSheet
+
+
 Public Function ParseTemplateFormula(ByVal sValue)
 'Парсим вероятную формулу на элементы
   Dim SlashPos, BreakerPos, Breaker, aFormula, prevItemType, i
@@ -232,13 +235,9 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
       'Заполнение формул вида {формула}
       FormulaValue = Empty
       
-      If ParamList.Exists("@SYS_CurrentCell") Then ParamList.Remove "@SYS_CurrentCell"
       If ParamList.Exists("@SYS_CurrentCell_Format") Then ParamList.Remove "@SYS_CurrentCell_Format"
       
-      Set CellRange = objSheet.Cells(aModel(i)(0), aModel(i)(1))
-
-
-      ParamList.Add "@SYS_CurrentCell", CellRange
+      Set CurrentCell = objSheet.Cells(aModel(i)(0), aModel(i)(1))
       
       For Each FormulaElement In aModel(i)(3)
         If FormulaElement(0) = 0 Then
@@ -254,7 +253,7 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
         End If
       Next
             
-      CellRange.Value = FormulaValue
+      CurrentCell.Value = FormulaValue
       
       If ParamList.Exists("@SYS_CurrentCell_Format") Then
         Dim FncFormatter, FormatterList
@@ -263,10 +262,10 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
         If Not IsArray(FormatterList) Then FormatterList = Array()
         
         For Each FncFormatter In FormatterList
-          Application.Run FncFormatter(0), CellRange, ParamList, FncFormatter(1)
+          Application.Run FncFormatter(0), CurrentCell, ParamList, FncFormatter(1)
           
           If Err.Number <> 0 Then
-            sErrorMsg = "Ошибка в формуле {" & CellRange.Value & "} ячейки (" & aModel(i)(0) & "," & aModel(i)(1) & ") при обработке форматтером " & FncFormatter(0) & "." & vbCrLf & "[" & Err.Number & "]" & Err.Description
+            sErrorMsg = "Ошибка в формуле {" & CurrentCell.Value & "} ячейки (" & aModel(i)(0) & "," & aModel(i)(1) & ") при обработке форматтером " & FncFormatter(0) & "." & vbCrLf & "[" & Err.Number & "]" & Err.Description
             On Error GoTo 0
             GoTo ResumeOnError
           End If
@@ -275,9 +274,7 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
         ParamList.Remove "@SYS_CurrentCell_Format"
       End If
       
-      Set CellRange = Nothing
-
-      ParamList.Remove "@SYS_CurrentCell"
+      Set CurrentCell = Nothing
       
     ElseIf aModel(i)(2) = 0 Then
       'Обработка наборов данных, вложенные отсекаются на уровне модели
@@ -310,9 +307,8 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
           End If
           
           'Помещаем в контекст текущую строку
-          If ParamList.Exists("@SYS_CurrentRow") Then ParamList.Remove "@SYS_CurrentRow"
-          ParamList.Add "@SYS_CurrentRow", objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
-          If ParamList.Exists("@SYS_CurrentCell") Then ParamList.Remove "@SYS_CurrentCell"
+          Set CurrentRow = objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
+          Set CurrentCell = Nothing
                 
           'Заполняем поля
           If ElementsInDataset > 0 Then ExcelReportFillSheet objSheet, aModel, ParamList, i + 1, i + ElementsInDataset
@@ -338,18 +334,17 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
       End If
       'Пропускаем элементы из цикла
             
-      If ParamList.Exists("@SYS_CurrentRow") Then ParamList.Remove "@SYS_CurrentRow"
+      Set CurrentRow = Nothing
      
       'Помистим в контекст обработанный диапазон
-      If ParamList.Exists("@SYS_PrevRecordset") Then ParamList.Remove "@SYS_PrevRecordset"
       If CurrentOffsetRow = 0 Then
-        ParamList.Add "@SYS_PrevRecordset", Nothing
+        Set PrevRecordset = Nothing
       Else
         row1 = aModel(i)(0)
         row2 = aModel(i)(0) + CurrentOffsetRow - 1
         col1 = aModel(i)(1)
         col2 = col1 + aModel(i)(4) - 1
-        ParamList.Add "@SYS_PrevRecordset", objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
+        Set PrevRecordset = objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
       End If
       
       CloseRecordsetForReport ParamList, aRecordSet
@@ -389,18 +384,19 @@ Private Function MakeReportExcel(Template, ParamList, sOutFile, bPrint)
   Set WorkBook = Excel.Workbooks.Open(Template)
   WorkBook.SaveAs sOutFile
   
-  Excel.ScreenUpdating = False
-  Excel.EnableEvents = False
-  Excel.DisplayAlerts = False
+  'Excel.ScreenUpdating = False
+  'Excel.EnableEvents = False
+  'Excel.DisplayAlerts = False
+  Excel.Visible = True
   
-  For Each Sheet In WorkBook.sheets
-    Sheet.Activate
-    ParamList.Add "@SYS_CurrentSheet", Sheet
-    ExcelReportFillSheet Sheet, ExcelReportGetModel(Sheet), ParamList
+  For Each CurrentSheet In WorkBook.sheets
+    CurrentSheet.Activate
+    ExcelReportFillSheet CurrentSheet, ExcelReportGetModel(CurrentSheet), ParamList
     'Удалим ссылки которые больше не нужны
-    If ParamList.Exists("@SYS_PrevRecordset") Then ParamList.Remove "@SYS_PrevRecordset"
-    ParamList.Remove ("@SYS_CurrentSheet")
+    Set PrevRecordset = Nothing
   Next
+  
+  Set CurrentSheet = Nothing
   
   Excel.DisplayAlerts = True
   Excel.EnableEvents = True
@@ -441,7 +437,7 @@ Public Function Excel_GetCellValue(pParamList, aArg As Variant) As String
     Excel_GetCellValue = Empty
   Else
     Dim Cell
-    Set Cell = pParamList("@SYS_CurrentSheet").Range(aArg(1))
+    Set Cell = CurrentSheet.Range(aArg(1))
     Excel_GetCellValue = Cell.Value
     If aArg(0) > 1 Then
       Cell.Clear
@@ -479,7 +475,7 @@ Public Function Excel_Code128(ByRef pParamList As Object, aArg As Variant) As St
     SaveByteArray byteStorage, filename, True
     If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
     If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
-    InsertImgIntoCell pParamList("@SYS_CurrentCell"), filename, vWidth, vHeight, Empty
+    InsertImgIntoCell CurrentCell, filename, vWidth, vHeight, Empty
   End If
   
   Exit Function
@@ -503,7 +499,7 @@ Public Function Excel_EAN13(ByRef pParamList As Object, aArg As Variant) As Stri
     SaveByteArray byteStorage, filename, True
     If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
     If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
-    InsertImgIntoCell pParamList("@SYS_CurrentCell"), filename, vWidth, vHeight, Empty
+    InsertImgIntoCell CurrentCell, filename, vWidth, vHeight, Empty
   End If
   
   Exit Function
@@ -540,7 +536,7 @@ Public Function Excel_Img(ByRef pParamList As Object, aArg As Variant) As String
   
   If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
   If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
-  InsertImgIntoCell pParamList("@SYS_CurrentCell"), filename, vWidth, vHeight, Empty
+  InsertImgIntoCell CurrentCell, filename, vWidth, vHeight, Empty
 
   Exit Function
 OnError:
