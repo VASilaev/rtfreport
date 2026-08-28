@@ -2388,37 +2388,36 @@ Public Function ToSQL(ByRef pValue As Variant)
   Case vbString
     ToSQL = "'" & Replace(pValue & "", "'", "''") & "'"
   Case vbDate
-    If pValue = CLng(pValue) Then
-      ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy") & "#"
-    ElseIf pValue < 1 Then
-      ToSQL = "#" & Format(pValue, "hh:nn:ss") & "#"
-    Else
-      ToSQL = "#" & Format(pValue, "mm\/dd\/yyyy hh:nn:ss") & "#"
-    End If
+    Select Case pValue
+      Case Is = CLng(pValue)
+        ToSQL = Format(pValue, "\#mm\/dd\/yyyy\#")
+      Case Is < 1
+        ToSQL = Format(pValue, "\#hh:nn:ss\#")
+      Case Else
+        ToSQL = Format(pValue, "\#mm\/dd\/yyyy hh:nn:ss\#")
+    End Select
   Case vbEmpty, vbNull
     ToSQL = "NULL"
   Case vbBoolean
     If pValue Then ToSQL = "true" Else ToSQL = "false"
-  Case vbInteger, vbLong, 20
+  Case vbInteger, vbLong, 20, vbByte
     ToSQL = pValue & vbNullString
   Case vbSingle, vbDouble, vbCurrency, vbDecimal
     ToSQL = Replace(pValue & vbNullString, ",", ".")
     'vbByte ?? char
+  Case Is > vbArray
+    Dim vElement
+    ToSQL = vbNullString
+    For Each vElement In pValue
+      If Len(ToSQL) = 0 Then
+        ToSQL = ToSQL(vElement)
+      Else
+        ToSQL = ToSQL & ", " & ToSQL(vElement)
+      End If
+    Next
+    If ToSQL = vbNullString Then ToSQL = "NULL"
   Case Else
-    If IsArray(pValue) Then
-      Dim vElement
-      ToSQL = vbNullString
-      For Each vElement In pValue
-        If Len(ToSQL) = 0 Then
-          ToSQL = ToSQL(vElement)
-        Else
-          ToSQL = ToSQL & ", " & ToSQL(vElement)
-        End If
-      Next
-      If ToSQL = vbNullString Then ToSQL = "NULL"
-    Else
-      Err.Raise 1001, , "Unsupported type of SQL value!"
-    End If
+    Err.Raise 1001, , "Unsupported type of SQL value!"
   End Select
 End Function
 
