@@ -7,16 +7,42 @@ Option Explicit
 ' Больше информации на странице https://github.com/VASilaev/rtfreport
 
 
-Dim CurrentCell, CurrentRow, PrevRecordset, CurrentSheet
+Dim CurrentCell, CurrentRow, PrevRecordset, CurrentSheet, CurrentCellFormatterList
 
+
+Private Const FI_TYPE = 0
+Private Const FI_VALUE = 1
+Private Const FT_UNKNOWN = -1
+Private Const FT_TEXT = 0
+Private Const FT_FORMULA = 1
+
+
+Private Const MD_ROW = 0
+Private Const MD_COLUMN = 1
+Private Const MD_TYPE = 2
+
+
+Private Const MD_RECORD_HEIGHT = 3
+Private Const MD_RECORD_WIDTH = 4
+Private Const MD_RECORD_NAME = 5
+Private Const MD_RECORD_SOURCE = 6
+
+Private Const MD_FORMULA_SOURCE = 3
+
+Private Const MDT_RECORD = 0
+Private Const MDT_VALUE = 1
+
+Private Const nBlockSize = 128
+ 
 
 Public Function ParseTemplateFormula(ByVal sValue)
 'Парсим вероятную формулу на элементы
-  Dim SlashPos, BreakerPos, Breaker, aFormula, prevItemType, i
-  prevItemType = -1 ' Не известно
+  Dim SlashPos, BreakerPos, Breaker, aFormula, prevItemType, i, UpperBound
+  prevItemType = FT_UNKNOWN ' Не известно
 
     'Парсим выражение, возможно это даже не формула. Формула должна содержать закрытые {}, в качестве символа экранирования используем "\"
   aFormula = Array()
+  UpperBound = -1
   Breaker = "{"
   Do While True
     SlashPos = InStr(sValue, "\")
@@ -27,69 +53,75 @@ Public Function ParseTemplateFormula(ByVal sValue)
     
     If SlashPos < BreakerPos Then
       If SlashPos > 1 Then
-        If prevItemType <> -1 Then
-          aFormula(UBound(aFormula))(1) = aFormula(UBound(aFormula))(1) & Left(sValue, SlashPos - 1)
+        If prevItemType <> FT_UNKNOWN Then
+          aFormula(UpperBound)(FI_VALUE) = aFormula(UpperBound)(FI_VALUE) & Left(sValue, SlashPos - 1)
         Else
-          ReDim Preserve aFormula(UBound(aFormula) + 1)
-          prevItemType = 0
-          aFormula(UBound(aFormula)) = Array(prevItemType, Left(sValue, SlashPos - 1))
+          UpperBound = UpperBound + 1
+          ReDim Preserve aFormula(UpperBound)
+          prevItemType = FT_TEXT
+          aFormula(UpperBound) = Array(FT_TEXT, Left(sValue, SlashPos - 1))
         End If
         sValue = Mid(sValue, SlashPos)
       End If
       
       If Left(sValue, 2) = "\\" Or Left(sValue, 2) = "\{" Or Left(sValue, 2) = "\}" Then i = 2 Else i = 1
-      If prevItemType <> -1 Then
-        aFormula(UBound(aFormula))(1) = aFormula(UBound(aFormula))(1) & Mid(sValue, i, 1)
+      If prevItemType <> FT_UNKNOWN Then
+        aFormula(UpperBound)(FI_VALUE) = aFormula(UpperBound)(FI_VALUE) & Mid(sValue, i, 1)
       Else
-        ReDim Preserve aFormula(UBound(aFormula) + 1)
-        prevItemType = 0
-        aFormula(UBound(aFormula)) = Array(prevItemType, Mid(sValue, i, 1))
+        UpperBound = UpperBound = 1
+        ReDim Preserve aFormula(UpperBound)
+        prevItemType = FT_TEXT
+        aFormula(UpperBound) = Array(FT_TEXT, Mid(sValue, i, 1))
       End If
       sValue = Mid(sValue, i + 1)
 
     ElseIf Breaker = "{" Then
       If BreakerPos > 1 Then
-        If prevItemType <> -1 Then
-          aFormula(UBound(aFormula))(1) = aFormula(UBound(aFormula))(1) & Left(sValue, BreakerPos - 1)
+        If prevItemType <> FT_UNKNOWN Then
+          aFormula(UpperBound)(FI_VALUE) = aFormula(UpperBound)(FI_VALUE) & Left(sValue, BreakerPos - 1)
         Else
-          ReDim Preserve aFormula(UBound(aFormula) + 1)
-          prevItemType = 0
-          aFormula(UBound(aFormula)) = Array(prevItemType, Left(sValue, BreakerPos - 1))
+          UpperBound = UpperBound + 1
+          ReDim Preserve aFormula(UpperBound)
+          prevItemType = FT_TEXT
+          aFormula(UpperBound) = Array(FT_TEXT, Left(sValue, BreakerPos - 1))
         End If
       End If
       sValue = Mid(sValue, BreakerPos + 1)
       
-      prevItemType = 1
-      ReDim Preserve aFormula(UBound(aFormula) + 1)
-      aFormula(UBound(aFormula)) = Array(prevItemType, "")
+      prevItemType = FT_FORMULA
+      UpperBound = UpperBound + 1
+      ReDim Preserve aFormula(UpperBound)
+      aFormula(UpperBound) = Array(FT_FORMULA, "")
       Breaker = "}"
     Else
-      aFormula(UBound(aFormula))(1) = aFormula(UBound(aFormula))(1) & Left(sValue, BreakerPos - 1)
-      prevItemType = -1
+      aFormula(UpperBound)(FI_VALUE) = aFormula(UpperBound)(FI_VALUE) & Left(sValue, BreakerPos - 1)
+      prevItemType = FT_UNKNOWN
       Breaker = "{"
       sValue = Mid(sValue, BreakerPos + 1)
     End If
   Loop
   
   If Len(sValue) > 0 Then
-    If prevItemType = -1 Then
-      ReDim Preserve aFormula(UBound(aFormula) + 1)
-      aFormula(UBound(aFormula)) = Array(0, sValue)
+    If prevItemType = FT_UNKNOWN Then
+      UpperBound = UpperBound + 1
+      ReDim Preserve aFormula(UpperBound)
+      aFormula(UpperBound) = Array(0, sValue)
     ElseIf Breaker = "{" Then
-      aFormula(UBound(aFormula))(1) = aFormula(UBound(aFormula))(1) & sValue
+      aFormula(UpperBound)(FI_VALUE) = aFormula(UpperBound)(FI_VALUE) & sValue
     Else 'Формула не закрыта значит это просто текст
-      aFormula(UBound(aFormula))(1) = "{" & aFormula(UBound(aFormula))(1) & sValue
-      aFormula(UBound(aFormula))(0) = 0
-      If UBound(aFormula) > 0 Then
-        If aFormula(UBound(aFormula) - 1)(0) = 0 Then
-          aFormula(UBound(aFormula) - 1)(1) = aFormula(UBound(aFormula) - 1)(1) & aFormula(UBound(aFormula))(1)
-          ReDim Preserve aFormula(UBound(aFormula) - 1)
+      aFormula(UpperBound)(FI_VALUE) = "{" & aFormula(UpperBound)(FI_VALUE) & sValue
+      aFormula(UpperBound)(FI_TYPE) = FT_TEXT
+      If UpperBound > 0 Then
+        If aFormula(UpperBound - 1)(FI_TYPE) = 0 Then
+          aFormula(UpperBound - 1)(FI_VALUE) = aFormula(UpperBound - 1)(FI_VALUE) & aFormula(UpperBound)(FI_VALUE)
+          UpperBound = UpperBound - 1
+          ReDim Preserve aFormula(UpperBound)
         End If
       End If
     End If
   End If
 
-  If UBound(aFormula) < 0 Then aFormula = Array(Array(0, ""))
+  If UpperBound < 0 Then aFormula = Array(Array(FT_TEXT, ""))
 
   ParseTemplateFormula = aFormula
 End Function
@@ -106,10 +138,12 @@ Function ExcelColToLetter(col)
   ExcelColToLetter = letter
 End Function
 
+
 Function ExcelReportGetModel(objSheet)
 'Извлекаем с листа модель заполнения
-  Dim model, workbookname, rng
-  model = Array()
+  Dim Model, workbookname, rng, UpperBound
+  Model = Array()
+  UpperBound = -1
   
   workbookname = objSheet.name
   
@@ -117,12 +151,13 @@ Function ExcelReportGetModel(objSheet)
   For Each rng In objSheet.Names
     'Находим именованные диапазоны заданного формата
     If LCase(Right(rng.name, 7)) = ".record" Then
-      ReDim Preserve model(UBound(model) + 1)
-      model(UBound(model)) = Array(rng.RefersToRange.Row, rng.RefersToRange.Column, 0, 1, 1, LCase(Mid(rng.name, 1, Len(rng.name) - 7)), rng.Comment)
+      UpperBound = UpperBound + 1
+      ReDim Preserve Model(UpperBound)
+      Model(UpperBound) = Array(rng.RefersToRange.Row, rng.RefersToRange.Column, MDT_RECORD, 1, 1, LCase(Mid(rng.name, 1, Len(rng.name) - 7)), rng.Comment)
         
       If IsArray(rng.RefersToRange.Value2) Then
-        model(UBound(model))(3) = UBound(rng.RefersToRange.Value2, 1)
-        model(UBound(model))(4) = UBound(rng.RefersToRange.Value2, 2)
+        Model(UpperBound)(MD_RECORD_HEIGHT) = UBound(rng.RefersToRange.Value2, 1)
+        Model(UpperBound)(MD_RECORD_WIDTH) = UBound(rng.RefersToRange.Value2, 2)
       End If
     End If
   Next
@@ -130,13 +165,14 @@ Function ExcelReportGetModel(objSheet)
   For Each rng In objSheet.Parent.Names
     'Находим именованные диапазоны заданного формата
     If LCase(Right(rng.name, 7)) = ".record" And Left(rng.RefersTo, Len(workbookname) + 2) = "=" & workbookname & "!" Then
-      ReDim Preserve model(UBound(model) + 1)
+      UpperBound = UpperBound + 1
+      ReDim Preserve Model(UpperBound)
       
-      model(UBound(model)) = Array(rng.RefersToRange.Row, rng.RefersToRange.Column, 0, 1, 1, LCase(Mid(rng.name, 1, Len(rng.name) - 7)), rng.Comment)
+      Model(UpperBound) = Array(rng.RefersToRange.Row, rng.RefersToRange.Column, MDT_RECORD, 1, 1, LCase(Mid(rng.name, 1, Len(rng.name) - 7)), rng.Comment)
         
       If IsArray(rng.RefersToRange.Value2) Then
-        model(UBound(model))(3) = UBound(rng.RefersToRange.Value2, 1)
-        model(UBound(model))(4) = UBound(rng.RefersToRange.Value2, 2)
+        Model(UpperBound)(MD_RECORD_HEIGHT) = UBound(rng.RefersToRange.Value2, 1)
+        Model(UpperBound)(MD_RECORD_WIDTH) = UBound(rng.RefersToRange.Value2, 2)
       End If
     End If
   Next
@@ -144,10 +180,10 @@ Function ExcelReportGetModel(objSheet)
   Dim i, j
   
   'Рекрдсеты не должны пересекаться
-  For i = LBound(model) To UBound(model) - 1
-    For j = i + 1 To UBound(model)
-      If model(i)(0) < model(j)(0) + model(j)(3) And model(i)(0) + model(i)(3) > model(j)(0) Then
-        Err.Raise 2000, , "Набор данных [" & model(i)(5) & "] пересекается с [" & model(j)(5) & "]"
+  For i = LBound(Model) To UpperBound - 1
+    For j = i + 1 To UpperBound
+      If Model(i)(MD_ROW) < Model(j)(MD_ROW) + Model(j)(MD_RECORD_HEIGHT) And Model(i)(MD_ROW) + Model(i)(MD_RECORD_HEIGHT) > Model(j)(MD_ROW) Then
+        Err.Raise 2000, , "Набор данных [" & Model(i)(MD_RECORD_NAME) & "] пересекается с [" & Model(j)(MD_RECORD_NAME) & "]"
       End If
     Next
   Next
@@ -158,45 +194,46 @@ Function ExcelReportGetModel(objSheet)
   Do While Not FindedCell Is Nothing
     If IsEmpty(StartAddress) Then StartAddress = FindedCell.Address Else If StartAddress = FindedCell.Address Then Exit Do
     
-    aFormula = ParseTemplateFormula(FindedCell.Text)
+    aFormula = ParseTemplateFormula(FindedCell.FormulaR1C1)
       
     'Если не формула - игнорируем
-    If Not (UBound(aFormula) = 0 And aFormula(0)(0) = 0) Then
-      ReDim Preserve model(UBound(model) + 1)
-      model(UBound(model)) = Array(FindedCell.Row, FindedCell.Column, 1, aFormula)
+    If Not (UBound(aFormula) = 0 And aFormula(0)(FI_TYPE) = FT_TEXT) Then
+      UpperBound = UpperBound + 1
+      ReDim Preserve Model(UpperBound)
+      Model(UpperBound) = Array(FindedCell.Row, FindedCell.Column, MDT_VALUE, aFormula)
     End If
     Set FindedCell = objSheet.Cells.FindNext(FindedCell)
   Loop
   
   'Сортируем элементы
   Dim swap
-  For i = LBound(model) To UBound(model) - 1
-    For j = i + 1 To UBound(model)
+  For i = LBound(Model) To UpperBound - 1
+    For j = i + 1 To UpperBound
       swap = False
             
-      If model(i)(2) = 0 And model(j)(2) = 1 Then
-        If model(j)(0) >= model(i)(0) And model(j)(0) < model(i)(0) + model(i)(3) And (model(j)(1) < model(i)(1) Or model(j)(1) >= model(i)(1) + model(i)(4)) Then
+      If Model(i)(MD_TYPE) = MDT_RECORD And Model(j)(MD_TYPE) = MDT_VALUE Then
+        If Model(j)(MD_ROW) >= Model(i)(MD_ROW) And Model(j)(MD_ROW) < Model(i)(MD_ROW) + Model(i)(MD_RECORD_HEIGHT) And (Model(j)(MD_COLUMN) < Model(i)(MD_COLUMN) Or Model(j)(MD_COLUMN) >= Model(i)(MD_COLUMN) + Model(i)(MD_RECORD_WIDTH)) Then
           'Специальный случай, формулы которые попали в строки рекордсета, но находятся вне его диапазона по столбцам должны обработаться до самого рекордсета
           swap = True
         End If
       End If
       
-      If Not swap And (model(j)(0) < model(i)(0) Or _
-             (model(j)(0) = model(i)(0) And model(j)(1) < model(i)(1)) Or _
-             (model(j)(0) = model(i)(0) And model(j)(1) = model(i)(1) And model(j)(2) < model(i)(2))) Then
+      If Not swap And (Model(j)(MD_ROW) < Model(i)(MD_ROW) Or _
+             (Model(j)(MD_ROW) = Model(i)(MD_ROW) And Model(j)(MD_COLUMN) < Model(i)(MD_COLUMN)) Or _
+             (Model(j)(MD_ROW) = Model(i)(MD_ROW) And Model(j)(MD_COLUMN) = Model(i)(MD_COLUMN) And Model(j)(MD_TYPE) < Model(i)(MD_TYPE))) Then
         'Заполняемые ячейки заполняются сверху вниз, слева направо. В первую очередь обрабатывается рекордсет.
         swap = True
       End If
       
       If swap Then
-        swap = model(i)
-        model(i) = model(j)
-        model(j) = swap
+        swap = Model(i)
+        Model(i) = Model(j)
+        Model(j) = swap
       End If
     Next
   Next
   
-  ExcelReportGetModel = model
+  ExcelReportGetModel = Model
 End Function
 
 Public Sub ExcelAddCellFormatter(ByRef ParamList, sProcFormatter, pUserData)
@@ -209,150 +246,339 @@ Public Sub ExcelAddCellFormatter(ByRef ParamList, sProcFormatter, pUserData)
 ' pUserData - копия данных переданных в ExcelAddCellFormatter
 '#param pUserData - пользовательские данные будут переданы при вызове форматтера
 
-
-Dim FormatterList
-
-If ParamList.Exists("@SYS_CurrentCell_Format") Then
-  FormatterList = ParamList("@SYS_CurrentCell_Format")
-  If Not IsArray(FormatterList) Then FormatterList = Array()
-Else
-  FormatterList = Array()
-End If
-
-KRNReport.addInArray FormatterList, Array(sProcFormatter, pUserData)
-
-ParamList("@SYS_CurrentCell_Format") = FormatterList
+KRNReport.addInArray CurrentCellFormatterList, Array(sProcFormatter, pUserData)
 
 End Sub
 
+Private Function ExcelReportCalcCellValue(aFormula, ParamList)
+  Dim FormulaValue, FormulaElement
+
+  'Заполнение формул вида {формула}
+  FormulaValue = Empty
+  
+  CurrentCellFormatterList = Array()
+  
+  For Each FormulaElement In aFormula
+    If FormulaElement(FI_TYPE) = FT_TEXT Then
+      FormulaValue = FormulaValue & FormulaElement(FI_VALUE)
+    ElseIf FormulaElement(FI_TYPE) = FT_FORMULA Then
+      If IsEmpty(FormulaValue) Then
+        FormulaValue = GetExpression(FormulaElement(FI_VALUE), ParamList)
+      Else
+        FormulaValue = FormulaValue & GetExpression(FormulaElement(FI_VALUE), ParamList)
+      End If
+    Else
+      Err.Raise 2002, , "Что то пошло не так модель сломалась"
+    End If
+  Next
+
+  ExcelReportCalcCellValue = Array(FormulaValue, CurrentCellFormatterList)
+  CurrentCellFormatterList = Array()
+End Function
+
+Private Sub ExcelReportFormatCell(pCell, pFormatterList, ParamList)
+  Dim FncFormatter, sErrorMsg
+  Set CurrentCell = pCell
+  
+  If ParamList.Exists("@SYS_CurrentCell") Then ParamList.Remove ("@SYS_CurrentCell")
+  ParamList.Add "@SYS_CurrentCell", pCell
+  On Error Resume Next
+  For Each FncFormatter In pFormatterList
+    Application.Run FncFormatter(0), CurrentCell, ParamList, FncFormatter(1)
+    
+    If Err.Number <> 0 Then
+      sErrorMsg = "Ошибка в формуле {" & CurrentCell.Value & "} ячейки (" & CurrentCell.Row & "," & CurrentCell.Column & ") при обработке форматтером " & FncFormatter(0) & "." & vbCrLf & "[" & Err.Number & "]" & Err.Description
+      Err.Clear
+      On Error GoTo 0
+      Err.Raise 1000, , sErrorMsg
+    End If
+  Next
+  On Error GoTo 0
+  Set CurrentCell = Nothing
+  ParamList.Remove "@SYS_CurrentCell"
+End Sub
+
 Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal nRowStart = -1, Optional ByVal nRowEnd = -1)
-  Dim i, j, FormulaValue, FormulaElement, aRecordSet, sErrorMsg, CellRange, row1, row2, col1, col2
+  Dim i, j, aRecordSet, sErrorMsg, CellRange, row1, row2, col1, col2, RecordResult, RecordValues, RecordValuesEtalon, RecordFormats
+  Dim CurrentOffsetRow, ElementsInDataset, bShift, RecordHeight
+  
   If nRowStart = -1 Then nRowStart = LBound(aModel)
   If nRowEnd = -1 Then nRowEnd = UBound(aModel)
   
   For i = nRowStart To nRowEnd
-    If aModel(i)(2) = 1 Then
-      'Заполнение формул вида {формула}
-      FormulaValue = Empty
-      
-      If ParamList.Exists("@SYS_CurrentCell_Format") Then ParamList.Remove "@SYS_CurrentCell_Format"
-      
-      Set CurrentCell = objSheet.Cells(aModel(i)(0), aModel(i)(1))
-      
-      For Each FormulaElement In aModel(i)(3)
-        If FormulaElement(0) = 0 Then
-          FormulaValue = FormulaValue & FormulaElement(1)
-        ElseIf FormulaElement(0) = 1 Then
-          If IsEmpty(FormulaValue) Then
-            FormulaValue = GetExpression(FormulaElement(1), ParamList)
-          Else
-            FormulaValue = FormulaValue & GetExpression(FormulaElement(1), ParamList)
-          End If
-        Else
-          Err.Raise 2002, , "Что то пошло не так модель сломалась"
-        End If
-      Next
-            
-      CurrentCell.Value = FormulaValue
-      
-      If ParamList.Exists("@SYS_CurrentCell_Format") Then
-        Dim FncFormatter, FormatterList
+    Select Case aModel(i)(MD_TYPE)
+      Case MDT_VALUE
+        RecordResult = ExcelReportCalcCellValue(aModel(i)(MD_FORMULA_SOURCE), ParamList)
+           
+        Set CurrentCell = objSheet.Cells(aModel(i)(MD_ROW), aModel(i)(MD_COLUMN))
+        CurrentCell.FormulaR1C1 = RecordResult(0)
         
-        FormatterList = ParamList("@SYS_CurrentCell_Format")
-        If Not IsArray(FormatterList) Then FormatterList = Array()
+        ExcelReportFormatCell CurrentCell, RecordResult(1), ParamList
         
-        For Each FncFormatter In FormatterList
-          Application.Run FncFormatter(0), CurrentCell, ParamList, FncFormatter(1)
-          
-          If Err.Number <> 0 Then
-            sErrorMsg = "Ошибка в формуле {" & CurrentCell.Value & "} ячейки (" & aModel(i)(0) & "," & aModel(i)(1) & ") при обработке форматтером " & FncFormatter(0) & "." & vbCrLf & "[" & Err.Number & "]" & Err.Description
-            On Error GoTo 0
-            GoTo ResumeOnError
-          End If
-        Next
-      
-        ParamList.Remove "@SYS_CurrentCell_Format"
-      End If
-      
-      Set CurrentCell = Nothing
-      
-    ElseIf aModel(i)(2) = 0 Then
-      'Обработка наборов данных, вложенные отсекаются на уровне модели
-      Dim CurrentOffsetRow, ElementsInDataset, bShift
-      
-      CurrentOffsetRow = 0
-      ElementsInDataset = 0
-      For j = i + 1 To UBound(aModel)
-        If aModel(j)(0) >= aModel(i)(0) + aModel(i)(3) Then Exit For
-        ElementsInDataset = ElementsInDataset + 1
-      Next
-      
-      'OpenRecordsetForReport возвращает EOF
-      If Not OpenRecordsetForReport(aModel(i)(5), aModel(i)(6), ParamList, aRecordSet) Then
-        Do While FetchRow(ParamList)
+      Case MDT_RECORD
+        'Обработка наборов данных, вложенные отсекаются на уровне модели
         
-          row1 = aModel(i)(0) + CurrentOffsetRow
-          row2 = row1 + aModel(i)(3) - 1
-          col1 = aModel(i)(1)
-          col2 = col1 + aModel(i)(4) - 1
+        CurrentOffsetRow = 0
+        ElementsInDataset = 0
+        RecordHeight = aModel(i)(MD_RECORD_HEIGHT)
         
-          If Not EOFRecordsetForReport(ParamList, aRecordSet) Then
-            Set CellRange = objSheet.rows(row1 & ":" & row2)
-            CellRange.copy
-            CellRange.Insert (-4121) 'xlDown
-            Set CellRange = Nothing
-            bShift = True
-          Else
-            bShift = False
-          End If
-          
-          'Помещаем в контекст текущую строку
-          Set CurrentRow = objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
-          Set CurrentCell = Nothing
-                
-          'Заполняем поля
-          If ElementsInDataset > 0 Then ExcelReportFillSheet objSheet, aModel, ParamList, i + 1, i + ElementsInDataset
-                  
-          'Сдвигаем всех на высоту блока
-          If bShift Then
-            For j = i + 1 To UBound(aModel)
-              aModel(j)(0) = aModel(j)(0) + aModel(i)(3)
-            Next
-          End If
-          
-          CurrentOffsetRow = CurrentOffsetRow + aModel(i)(3)
-        Loop
-      Else
-        'Удаляем шаблон
-        row1 = aModel(i)(0)
-        row2 = row1 + aModel(i)(3) - 1
-        objSheet.rows(row1 + ":" + row2).Delete (-4162) 'xlUp
-        'Сдвигаем в обратном направлении
+        'Простая таблица без вложенных подтаблиц, ее можно заполнить одним массивом.
+        Dim bIsSimpleTable
+        bIsSimpleTable = True
+        
         For j = i + 1 To UBound(aModel)
-          aModel(j)(0) = aModel(j)(0) - aModel(i)(3)
+          If aModel(j)(MD_ROW) >= aModel(i)(MD_ROW) + aModel(i)(MD_RECORD_HEIGHT) Then Exit For
+          If aModel(j)(MD_TYPE) <> MDT_VALUE Then bIsSimpleTable = False
+          ElementsInDataset = ElementsInDataset + 1
         Next
-      End If
-      'Пропускаем элементы из цикла
+        
+        'OpenRecordsetForReport возвращает EOF = True если нет строк с данными
+        If Not OpenRecordsetForReport(aModel(i)(MD_RECORD_NAME), aModel(i)(MD_RECORD_SOURCE), ParamList, aRecordSet) Then
+        
+          row1 = aModel(i)(MD_ROW)
+          row2 = row1 + RecordHeight - 1
+          col1 = aModel(i)(MD_COLUMN)
+          col2 = col1 + aModel(i)(MD_RECORD_WIDTH) - 1
+          
+          If bIsSimpleTable Then
+            ' =========================================================================
+            ' БЛОЧНЫЙ АЛГОРИТМ ЗАПОЛНЕНИЯ (ПРОСТАЯ ТАБЛИЦА)
+            ' =========================================================================
+            Dim nBlockRows, nAllocatedRecords, nCurrentRecordInBlock, nTotalProcessedRecords
+            Dim rBlock1, rBlock2, bInitialized, singleEtalon
+            Dim CellFormulaIdx, CellRelRow, CellRelCol
+            Dim flushRng, tailRowsToDelete, unscaledData
             
-      Set CurrentRow = Nothing
-     
-      'Помистим в контекст обработанный диапазон
-      If CurrentOffsetRow = 0 Then
-        Set PrevRecordset = Nothing
-      Else
-        row1 = aModel(i)(0)
-        row2 = aModel(i)(0) + CurrentOffsetRow - 1
-        col1 = aModel(i)(1)
-        col2 = col1 + aModel(i)(4) - 1
-        Set PrevRecordset = objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
-      End If
-      
-      CloseRecordsetForReport ParamList, aRecordSet
-      
-      i = i + ElementsInDataset
-    Else
-      Err.Raise 2001, , "Что то пошло не так модель сломалась"
-    End If
+            nBlockRows = nBlockSize * RecordHeight
+            nAllocatedRecords = 0
+            nCurrentRecordInBlock = 0
+            nTotalProcessedRecords = 0
+            bInitialized = False
+            RecordFormats = Array()
+            
+            ' Начало текущего блока выгрузки
+            rBlock1 = row1
+            
+            
+            
+            Do While FetchRow(ParamList)
+              ' --- 1. Первичная инициализация при первой строке набора данных ---
+              If Not bInitialized Then
+                ' Снимаем эталон одной записи (1..RecordHeight, 1..RecordWidth)
+                Set CurrentRow = objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
+                If IsArray(CurrentRow.FormulaR1C1) Then
+                  singleEtalon = CurrentRow.FormulaR1C1
+                Else
+                  If IsEmpty(singleEtalon) Then singleEtalon = Array()
+                  ReDim singleEtalon(1 To 1, 1 To 1)
+                  singleEtalon(1, 1) = CurrentRow.FormulaR1C1
+                End If
+                Set CurrentRow = Nothing
+                
+                ' Формируем эталонный массив на весь блок nBlockSize записей
+                ReDim RecordValuesEtalon(1 To nBlockRows, 1 To aModel(i)(MD_RECORD_WIDTH))
+                Dim b_k, b_r, b_c
+                For b_k = 0 To nBlockSize - 1
+                  For b_r = 1 To RecordHeight
+                    For b_c = 1 To aModel(i)(MD_RECORD_WIDTH)
+                      RecordValuesEtalon(b_k * RecordHeight + b_r, b_c) = singleEtalon(b_r, b_c)
+                    Next
+                  Next
+                Next
+                
+                ' Раздвигаем Excel сразу на nBlockSize * 2 записей:
+                ' Исходный шаблон (1 копия) + вставка (nBlockSize * 2 - 1) копий
+                If (nBlockSize * 2 - 1) > 0 Then
+                  
+                  ' Раздвигаем Excel сразу до nBlockSize * 2 логических записей (с учетом исходного шаблона)
+                  Dim nTargetRecords, nCurrentCopies, nToCopy
+                  nTargetRecords = nBlockSize * 2
+                  nCurrentCopies = 1
+                  
+                  ' Экспоненциальное размножение шаблона со сдвигом вниз
+                  Do While nCurrentCopies < nTargetRecords
+                    nToCopy = nCurrentCopies
+                    If nCurrentCopies + nToCopy > nTargetRecords Then
+                      nToCopy = nTargetRecords - nCurrentCopies
+                    End If
+                    
+                    ' Копируем уже накопленный блок строк
+                    Set CellRange = objSheet.Rows(row1 & ":" & (row1 + nToCopy * RecordHeight - 1))
+                    CellRange.Copy
+                    ' Вставляем перед строкой, следующей за уже накопленными копиями
+                    objSheet.Rows(row1 + nCurrentCopies * RecordHeight).Insert (-4121) ' xlDown
+                    objSheet.Application.CutCopyMode = False
+                    Set CellRange = Nothing
+                    
+                    nCurrentCopies = nCurrentCopies + nToCopy
+                  Loop
+                  
+                  nAllocatedRecords = nBlockSize * 2
+
+                End If
+                
+                nAllocatedRecords = nBlockSize * 2
+                RecordValues = RecordValuesEtalon
+                bInitialized = True
+              End If
+              
+              ' --- 2. Расчет значений ячеек для текущей записи ---
+              For CellFormulaIdx = i + 1 To i + ElementsInDataset
+                CellRelRow = aModel(CellFormulaIdx)(MD_ROW) - aModel(i)(MD_ROW)
+                CellRelCol = aModel(CellFormulaIdx)(MD_COLUMN) - aModel(i)(MD_COLUMN)
+                
+                RecordResult = ExcelReportCalcCellValue(aModel(CellFormulaIdx)(MD_FORMULA_SOURCE), ParamList)
+                
+                ' Запись в текущую позицию внутри блока
+                RecordValues(nCurrentRecordInBlock * RecordHeight + CellRelRow + 1, CellRelCol + 1) = RecordResult(0)
+                
+                ' Сохраняем постобработчик с абсолютными координатами листа
+                If UBound(RecordResult(1)) >= 0 Then
+                  ReDim Preserve RecordFormats(UBound(RecordFormats) + 1)
+                  RecordFormats(UBound(RecordFormats)) = Array(rBlock1 + nCurrentRecordInBlock * RecordHeight + CellRelRow, col1 + CellRelCol, RecordResult(1))
+                End If
+              Next
+              
+              nCurrentRecordInBlock = nCurrentRecordInBlock + 1
+              nTotalProcessedRecords = nTotalProcessedRecords + 1
+              
+              ' --- 3. Сброс полного блока при достижении nBlockSize ---
+              If nCurrentRecordInBlock = nBlockSize Then
+                rBlock2 = rBlock1 + nBlockRows - 1
+                Set flushRng = objSheet.Range(ExcelColToLetter(col1) & rBlock1 & ":" & ExcelColToLetter(col2) & rBlock2)
+                flushRng.FormulaR1C1 = RecordValues
+                Set flushRng = Nothing
+                
+                ' Выполнение постобработчиков накопленного блока
+                For Each RecordResult In RecordFormats
+                  ExcelReportFormatCell objSheet.Cells(RecordResult(0), RecordResult(1)), RecordResult(2), ParamList
+                Next
+                RecordFormats = Array()
+                
+                ' Пополнение буфера строк: копируем блок строк вниз, чтобы резерв оставался >= nBlockSize
+                Set CellRange = objSheet.Rows(rBlock1 & ":" & rBlock2)
+                CellRange.Copy
+                objSheet.Rows((rBlock2 + 1) & ":" & (rBlock2 + nBlockRows)).Insert (-4121) ' xlDown
+                objSheet.Application.CutCopyMode = False
+                Set CellRange = Nothing
+                nAllocatedRecords = nAllocatedRecords + nBlockSize
+                
+                ' Смещение указателей на следующий блок
+                rBlock1 = rBlock1 + nBlockRows
+                nCurrentRecordInBlock = 0
+                RecordValues = RecordValuesEtalon
+              End If
+            Loop
+            
+            ' --- 4. Финализация: сброс остатка и очистка хвоста ---
+            If bInitialized Then
+              ' Сброс неполного остатка (если есть)
+              If nCurrentRecordInBlock > 0 Then
+                Dim nTailRows
+                nTailRows = nCurrentRecordInBlock * RecordHeight
+                rBlock2 = rBlock1 + nTailRows - 1
+                
+                ReDim unscaledData(1 To nTailRows, 1 To aModel(i)(MD_RECORD_WIDTH))
+                For b_r = 1 To nTailRows
+                  For b_c = 1 To aModel(i)(MD_RECORD_WIDTH)
+                    unscaledData(b_r, b_c) = RecordValues(b_r, b_c)
+                  Next
+                Next
+                
+                Set flushRng = objSheet.Range(ExcelColToLetter(col1) & rBlock1 & ":" & ExcelColToLetter(col2) & rBlock2)
+                flushRng.FormulaR1C1 = unscaledData
+                Set flushRng = Nothing
+                
+                For Each RecordResult In RecordFormats
+                  ExcelReportFormatCell objSheet.Cells(RecordResult(0), RecordResult(1)), RecordResult(2), ParamList
+                Next
+                RecordFormats = Array()
+                
+                rBlock1 = rBlock1 + nTailRows
+              End If
+              
+              ' Удаление лишнего зарезервированного хвоста строк
+              tailRowsToDelete = (nAllocatedRecords - nTotalProcessedRecords) * RecordHeight
+              If tailRowsToDelete > 0 Then
+                objSheet.Rows(rBlock1 & ":" & (rBlock1 + tailRowsToDelete - 1)).Delete (-4162) ' xlUp
+              End If
+              
+              CurrentOffsetRow = nTotalProcessedRecords * RecordHeight
+              
+              ' Сдвиг координат последующих элементов модели на фактически добавленную высоту
+              Dim nAddedHeight
+              nAddedHeight = (nTotalProcessedRecords - 1) * RecordHeight
+              If nAddedHeight <> 0 Then
+                For j = i + 1 To UBound(aModel)
+                  aModel(j)(MD_ROW) = aModel(j)(MD_ROW) + nAddedHeight
+                Next
+              End If
+            End If
+            
+          Else
+            ' =========================================================================
+            ' ИСХОДНЫЙ ПОСТРОЧНЫЙ АЛГОРИТМ (СЛОЖНАЯ ТАБЛИЦА С ВЛОЖЕНИЯМИ)
+            ' =========================================================================
+            RecordValuesEtalon = Empty
+            
+            Do While FetchRow(ParamList)
+              If Not EOFRecordsetForReport(ParamList, aRecordSet) Then
+                Set CellRange = objSheet.Rows(row1 & ":" & row2)
+                CellRange.Copy
+                CellRange.Insert (-4121) ' xlDown
+                Set CellRange = Nothing
+                bShift = True
+              Else
+                bShift = False
+              End If
+              
+              Set CurrentRow = objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
+              
+              ' Рекурсивное заполнение дочерних таблиц/данных
+              If ElementsInDataset > 0 Then ExcelReportFillSheet objSheet, aModel, ParamList, i + 1, i + ElementsInDataset
+              
+              If bShift Then
+                For j = i + 1 To UBound(aModel)
+                  aModel(j)(MD_ROW) = aModel(j)(MD_ROW) + RecordHeight
+                Next
+              End If
+              
+              CurrentOffsetRow = CurrentOffsetRow + RecordHeight
+              row1 = row1 + RecordHeight
+              row2 = row2 + RecordHeight
+            Loop
+          End If
+          
+        Else
+          ' Удаляем шаблон (если набор данных пуст)
+          row1 = aModel(i)(MD_ROW)
+          row2 = row1 + RecordHeight - 1
+          objSheet.Rows(row1 & ":" & row2).Delete (-4162) ' xlUp
+          ' Сдвигаем в обратном направлении
+          For j = i + 1 To UBound(aModel)
+            aModel(j)(MD_ROW) = aModel(j)(MD_ROW) - RecordHeight
+          Next
+        End If
+        
+        Set CurrentRow = Nothing
+       
+        ' Поместим в контекст обработанный диапазон
+        If CurrentOffsetRow = 0 Then
+          Set PrevRecordset = Nothing
+        Else
+          row1 = aModel(i)(MD_ROW)
+          row2 = row1 + CurrentOffsetRow - 1
+          col1 = aModel(i)(MD_COLUMN)
+          col2 = col1 + aModel(i)(MD_RECORD_WIDTH) - 1
+          Set PrevRecordset = objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
+        End If
+        
+        CloseRecordsetForReport ParamList, aRecordSet
+        
+        i = i + ElementsInDataset
+      Case Else
+        Err.Raise 2001, , "Что то пошло не так модель сломалась"
+    End Select
   Next
   
   Exit Function
@@ -384,9 +610,9 @@ Private Function MakeReportExcel(Template, ParamList, sOutFile, bPrint)
   Set WorkBook = Excel.Workbooks.Open(Template)
   WorkBook.SaveAs sOutFile
   
-  'Excel.ScreenUpdating = False
-  'Excel.EnableEvents = False
-  'Excel.DisplayAlerts = False
+  Excel.ScreenUpdating = False
+  Excel.EnableEvents = False
+  Excel.DisplayAlerts = False
   Excel.Visible = True
   
   For Each CurrentSheet In WorkBook.sheets
@@ -409,12 +635,14 @@ ExitFunction:
 
 CloseExcel:
   sError = Err.Description
+  Err.Clear
   Excel.DisplayAlerts = True
   Excel.EnableEvents = True
   Excel.ScreenUpdating = True
   Excel.Visible = True
+  WorkBook.Close False
   Excel.Quit
-  MsgBox "При заполнении шаблона произошла ошибка" & sError, vbCritical + vbOKOnly, "Заполнение шаблона Excel"
+  MsgBox "При заполнении шаблона произошла ошибка" & vbCrLf & sError, vbCritical + vbOKOnly, "Заполнение шаблона Excel"
   
   Resume ExitFunction
 End Function
@@ -469,13 +697,9 @@ Public Function Excel_Code128(ByRef pParamList As Object, aArg As Variant) As St
   On Error GoTo OnError:
   Dim byteStorage() As Byte, BCWidth
   If aArg(0) > 0 And aArg(1) <> vbNullString Then
-    byteStorage = StrConv(zebra2wmf(code128_zebra(aArg(1), 3), 2, 40, BCWidth), vbFromUnicode)
-    Dim filename As String, vWidth, vHeight
-    filename = "%temp%\picture.emf"
-    SaveByteArray byteStorage, filename, True
-    If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
-    If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
-    InsertImgIntoCell CurrentCell, filename, vWidth, vHeight, Empty
+    byteStorage() = StrConv(zebra2wmf(code128_zebra(aArg(1), 3), 2, 40, BCWidth), vbFromUnicode)
+    aArg(1) = byteStorage
+    Excel_Code128 = Excel_Img(pParamList, aArg)
   End If
   
   Exit Function
@@ -493,13 +717,9 @@ Public Function Excel_EAN13(ByRef pParamList As Object, aArg As Variant) As Stri
   
   
   If aArg(0) > 0 And aArg(1) <> vbNullString Then
-    byteStorage = StrConv(zebra2wmf(EAN13_zebra(aArg(1), False), 2, 40, BCWidth), vbFromUnicode)
-    Dim Image, filename As String
-    filename = "%temp%\picture.emf"
-    SaveByteArray byteStorage, filename, True
-    If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
-    If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
-    InsertImgIntoCell CurrentCell, filename, vWidth, vHeight, Empty
+    byteStorage() = StrConv(zebra2wmf(EAN13_zebra(aArg(1), False), 2, 40, BCWidth), vbFromUnicode)
+    aArg(1) = byteStorage
+    Excel_EAN13 = Excel_Img(pParamList, aArg)
   End If
   
   Exit Function
@@ -509,8 +729,8 @@ OnError:
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
 End Function
 
-Public Function Excel_Img(ByRef pParamList As Object, aArg As Variant) As String
-  Excel_Img = vbNullString
+Public Function Excel_Img_PostProcess(ByRef pRange, ByRef pParamList, aArg As Variant)
+  Excel_Img_PostProcess = vbNullString
   On Error GoTo OnError:
   Dim BCWidth, filename As String, vWidth, vHeight
   
@@ -536,11 +756,15 @@ Public Function Excel_Img(ByRef pParamList As Object, aArg As Variant) As String
   
   If aArg(0) > 1 Then vWidth = aArg(2) Else vWidth = Empty
   If aArg(0) > 2 Then vHeight = aArg(3) Else vHeight = Empty
-  InsertImgIntoCell CurrentCell, filename, vWidth, vHeight, Empty
+  InsertImgIntoCell pRange, filename, vWidth, vHeight, Empty
 
   Exit Function
 OnError:
   Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
   On Error GoTo 0
   Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+End Function
+
+Public Function Excel_Img(ByRef pParamList As Object, aArg As Variant) As String
+  ExcelAddCellFormatter pParamList, "Excel_Img_PostProcess", aArg
 End Function

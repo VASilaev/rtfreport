@@ -1694,6 +1694,7 @@ End Function
 
 Public Sub CloseRecordsetForReport(ByRef ParamList, ByRef aRecordSet As Variant)
   Dim objRecordSet, bIsCustom
+  If IsEmpty(aRecordSet) Then Exit Sub
   Set objRecordSet = aRecordSet(1)
   bIsCustom = aRecordSet(3)
   Set aRecordSet(1) = Nothing
@@ -1787,8 +1788,8 @@ TryAsQuery:
   
     If Err.Number <> 0 Then
     'Формируем текст ошибки
-      On Error GoTo 0
       sErrorMsg = "Ошибка при открытии курсора {" & name & "}." & vbCrLf & Err.Description
+      On Error GoTo 0
       Err.Clear
       sErrorMsg = sErrorMsg & vbCrLf & vbCrLf & sSQL & vbCrLf & vbCrLf & DumpContext(ParamList)
       MsgBox sErrorMsg
