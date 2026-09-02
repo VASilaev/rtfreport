@@ -29,8 +29,9 @@ Private Const MD_RECORD_SOURCE = 6
 
 Private Const MD_FORMULA_SOURCE = 3
 
-Private Const MDT_RECORD = 0
-Private Const MDT_VALUE = 1
+Private Const MDT_PAGE_TEMPLATE = 0
+Private Const MDT_RECORD = 1
+Private Const MDT_VALUE = 2
 
 Private Const nBlockSize = 1024
  
@@ -139,6 +140,24 @@ Function ExcelColToLetter(col)
 End Function
 
 
+Private Sub AddRecordToModel(ByRef Model, ByRef UpperBound, ByRef Range)
+  Dim name
+  UpperBound = UpperBound + 1
+  ReDim Preserve Model(UpperBound)
+  
+  name = LCase(Mid(Range.name, 1, Len(Range.name) - 7))
+  If name = "page" Then
+    Model(UpperBound) = Array(0, 0, MDT_PAGE_TEMPLATE, 0, 0, LCase(Mid(Range.name, 1, Len(Range.name) - 7)), Range.Comment)
+  Else
+    Model(UpperBound) = Array(Range.RefersToRange.Row, Range.RefersToRange.Column, MDT_RECORD, 1, 1, LCase(Mid(Range.name, 1, Len(Range.name) - 7)), Range.Comment)
+      
+    If IsArray(Range.RefersToRange.Value2) Then
+      Model(UpperBound)(MD_RECORD_HEIGHT) = UBound(Range.RefersToRange.Value2, 1)
+      Model(UpperBound)(MD_RECORD_WIDTH) = UBound(Range.RefersToRange.Value2, 2)
+    End If
+  End If
+End Sub
+
 Function ExcelReportGetModel(objSheet)
 'Извлекаем с листа модель заполнения
   Dim Model, workbookname, rng, UpperBound
@@ -151,29 +170,14 @@ Function ExcelReportGetModel(objSheet)
   For Each rng In objSheet.Names
     'Находим именованные диапазоны заданного формата
     If LCase(Right(rng.name, 7)) = ".record" Then
-      UpperBound = UpperBound + 1
-      ReDim Preserve Model(UpperBound)
-      Model(UpperBound) = Array(rng.RefersToRange.Row, rng.RefersToRange.Column, MDT_RECORD, 1, 1, LCase(Mid(rng.name, 1, Len(rng.name) - 7)), rng.Comment)
-        
-      If IsArray(rng.RefersToRange.Value2) Then
-        Model(UpperBound)(MD_RECORD_HEIGHT) = UBound(rng.RefersToRange.Value2, 1)
-        Model(UpperBound)(MD_RECORD_WIDTH) = UBound(rng.RefersToRange.Value2, 2)
-      End If
+      AddRecordToModel Model, UpperBound, rng
     End If
   Next
   
   For Each rng In objSheet.Parent.Names
     'Находим именованные диапазоны заданного формата
     If LCase(Right(rng.name, 7)) = ".record" And Left(rng.RefersTo, Len(workbookname) + 2) = "=" & workbookname & "!" Then
-      UpperBound = UpperBound + 1
-      ReDim Preserve Model(UpperBound)
-      
-      Model(UpperBound) = Array(rng.RefersToRange.Row, rng.RefersToRange.Column, MDT_RECORD, 1, 1, LCase(Mid(rng.name, 1, Len(rng.name) - 7)), rng.Comment)
-        
-      If IsArray(rng.RefersToRange.Value2) Then
-        Model(UpperBound)(MD_RECORD_HEIGHT) = UBound(rng.RefersToRange.Value2, 1)
-        Model(UpperBound)(MD_RECORD_WIDTH) = UBound(rng.RefersToRange.Value2, 2)
-      End If
+      AddRecordToModel Model, UpperBound, rng
     End If
   Next
   
@@ -298,7 +302,7 @@ Private Sub ExcelReportFormatCell(pCell, pFormatterList, ParamList)
   ParamList.Remove "@SYS_CurrentCell"
 End Sub
 
-Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal nRowStart = -1, Optional ByVal nRowEnd = -1)
+Public Function ExcelReportFillSheet(objSheet, ByVal aModel, ParamList, Optional ByVal nRowStart = -1, Optional ByVal nRowEnd = -1)
   Dim i, j, aRecordSet, sErrorMsg, CellRange, row1, row2, col1, col2, RecordResult, RecordValues, RecordValuesEtalon, RecordFormats, nBlockSizeLocal
   Dim CurrentOffsetRow, ElementsInDataset, bShift, RecordHeight
   
@@ -578,13 +582,14 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
             Loop
           End If
           
+          CloseRecordsetForReport ParamList, aRecordSet
         Else
           ' Удаляем шаблон (если набор данных пуст)
           row1 = aModel(i)(MD_ROW)
           row2 = row1 + RecordHeight - 1
           objSheet.Rows(row1 & ":" & row2).Delete (-4162) ' xlUp
           ' Сдвигаем в обратном направлении
-          For j = i + 1 To UBound(aModel)
+          For j = i + ElementsInDataset + 1 To UBound(aModel)
             aModel(j)(MD_ROW) = aModel(j)(MD_ROW) - RecordHeight
           Next
         End If
@@ -602,9 +607,8 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
           Set PrevRecordset = objSheet.Range(ExcelColToLetter(col1) & row1 & ":" & ExcelColToLetter(col2) & row2)
         End If
         
-        CloseRecordsetForReport ParamList, aRecordSet
         
-        i = i + ElementsInDataset
+        i = i + ElementsInDataset + 1
       Case Else
         Err.Raise 2001, , "Что то пошло не так модель сломалась"
     End Select
@@ -625,16 +629,15 @@ ResumeOnError:
 Err.Raise 2001, , sErrorMsg
 End Function
 
-
 Private Function MakeReportExcel(Template, ParamList, sOutFile, bPrint)
-  Dim WorkBook, Sheet, Excel, sError
+  Dim WorkBook, Sheet, Excel, sError, CurrentSheet
   
   AddSpecialFunction ParamList, "Excel_GetCellValue", "Cell"
   AddSpecialFunction ParamList, "Excel_Code128", "Code128"
   AddSpecialFunction ParamList, "Excel_EAN13", "EAN13"
   AddSpecialFunction ParamList, "Excel_Img", "img"
   Set Excel = CreateObject("Excel.Application")
-  On Error GoTo CloseExcel
+  'On Error GoTo CloseExcel
   Set WorkBook = Nothing
   Set WorkBook = Excel.Workbooks.Open(Template)
   WorkBook.SaveAs sOutFile
@@ -646,7 +649,73 @@ Private Function MakeReportExcel(Template, ParamList, sOutFile, bPrint)
   
   For Each CurrentSheet In WorkBook.sheets
     CurrentSheet.Activate
-    ExcelReportFillSheet CurrentSheet, ExcelReportGetModel(CurrentSheet), ParamList
+    Dim Model, isPageTemplate As Boolean
+    Model = ExcelReportGetModel(CurrentSheet)
+    isPageTemplate = False
+    If UBound(Model) >= 0 Then If Model(0)(MD_TYPE) = MDT_PAGE_TEMPLATE Then isPageTemplate = True
+    
+    If isPageTemplate Then
+      Dim TemplateSheet, IndexNum As Long, aRecordSet, SheetName
+      
+      
+      Set TemplateSheet = CurrentSheet
+      If Not OpenRecordsetForReport(Model(0)(MD_RECORD_NAME), Model(0)(MD_RECORD_SOURCE), ParamList, aRecordSet) Then
+        IndexNum = 0
+        Do While FetchRow(ParamList)
+          If ParamList.Exists("page.caption") Then
+            SheetName = ParamList("page.caption")
+            IndexNum = 0
+          Else
+            SheetName = CurrentSheet.Caption
+          End If
+          
+          ' Проверяем наличие листа с таким именем и добавляем индекс, если нужно
+          Dim BaseName As String
+          Dim TestName As String
+          Dim ws
+          
+          BaseName = SheetName
+          TestName = BaseName
+          
+          ' Ищем свободное имя
+          Do
+            TestName = BaseName
+            If IndexNum > 0 Then TestName = BaseName & " (" & IndexNum & ")"
+            
+            ' Проверяем, существует ли лист с таким именем
+            On Error Resume Next
+            Set ws = WorkBook.Worksheets(TestName)
+            On Error GoTo 0
+            
+            If IsEmpty(ws) Then
+              Exit Do ' Имя свободно
+            ElseIf ws Is Nothing Then
+              Exit Do ' Имя свободно
+            Else
+              Set ws = Nothing
+              IndexNum = IndexNum + 1
+            End If
+          Loop
+          
+          SheetName = TestName
+          
+          ' Копируем шаблонный лист после текущего CurrentSheet
+          CurrentSheet.Copy After:=TemplateSheet
+          Set TemplateSheet = WorkBook.Worksheets(TemplateSheet.Index + 1)
+          
+          ' Переименовываем текущий лист
+          TemplateSheet.name = SheetName
+           
+          ExcelReportFillSheet TemplateSheet, Model, ParamList, 1
+        Loop
+        CloseRecordsetForReport ParamList, aRecordSet
+      End If
+      
+      ' Удаляем шаблонный лист
+      CurrentSheet.Delete
+    Else
+      ExcelReportFillSheet CurrentSheet, ExcelReportGetModel(CurrentSheet), ParamList
+    End If
     'Удалим ссылки которые больше не нужны
     Set PrevRecordset = Nothing
   Next

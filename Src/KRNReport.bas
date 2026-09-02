@@ -1506,7 +1506,7 @@ Public Function GetTemplate(ByVal idReport As Long) As Variant
  
   Set fso = CreateObject("scripting.FileSystemObject")
  
-  Set tRep = CurrentDb.OpenRecordset(cReportTable, dbOpenDynaset)
+  Set tRep = CurrentDb.OpenRecordset(cReportTable)
   tRep.FindFirst "id = " & idReport
   
   If tRep.NoMatch Then Err.Raise 1000, , "Не найден шаблон с кодом " & idReport
@@ -1693,8 +1693,9 @@ Public Function fncImageToRTF(pParamList, aArg As Variant) As String
 End Function
 
 Public Sub CloseRecordsetForReport(ByRef ParamList, ByRef aRecordSet As Variant)
-  Dim objRecordSet, bIsCustom
+  Dim objRecordSet As Variant, bIsCustom
   If IsEmpty(aRecordSet) Then Exit Sub
+  
   Set objRecordSet = aRecordSet(1)
   bIsCustom = aRecordSet(3)
   Set aRecordSet(1) = Nothing
@@ -1705,6 +1706,7 @@ Public Sub CloseRecordsetForReport(ByRef ParamList, ByRef aRecordSet As Variant)
     Application.Run objRecordSet("name") & "_close", objRecordSet, ParamList
     If Err.Number <> 0 Then Err.Raise Err.Number, Err.Source, Err.Description
   Else
+    On Error Resume Next
     objRecordSet.Close
   End If
 End Sub
@@ -1736,7 +1738,7 @@ Public Function RecordCountRecordsetForReport(ByRef ParamList, ByRef aRecordSet 
       Err.Raise ErrNumber, ErrSource, ErrDescription
     End If
   Else
-    Dim rs As Recordset, savedBookmark
+    Dim rs, savedBookmark
     Set rs = aRecordSet(1)
     
     If rs.EOF Then
@@ -2110,7 +2112,10 @@ Public Function FetchRow(ByRef pDic, Optional ByVal pCursorName As String = vbNu
   Dim vRecordSet, vCursorName, vFiles, tmpdic, fld
   
   vRecordSet = pDic("@SYS_CurrentRecordSet")
-  If pCursorName = vbNullString Then
+  If IsEmpty(vRecordSet) Then
+    FetchRow = False
+    Exit Function
+  ElseIf pCursorName = vbNullString Then
     vCursorName = vRecordSet(0)
     Set vRecordSet = vRecordSet(1)
   Else
