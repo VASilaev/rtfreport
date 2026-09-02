@@ -1718,6 +1718,38 @@ Public Function EOFRecordsetForReport(ByRef ParamList, ByRef aRecordSet As Varia
   End If
 End Function
 
+Public Function RecordCountRecordsetForReport(ByRef ParamList, ByRef aRecordSet As Variant) As Variant
+  If aRecordSet(3) Then
+    On Error Resume Next
+    RecordCountRecordsetForReport = Application.Run(aRecordSet(1)("name") & "_RecordCount", aRecordSet(1), ParamList)
+    
+    If Err.Number = 2517 Then
+      RecordCountRecordsetForReport = Empty
+    ElseIf Err.Number <> 0 Then
+      
+      Dim ErrNumber, ErrSource, ErrDescription
+      ErrNumber = Err.Number
+      ErrSource = Err.Source
+      ErrDescription = Err.Description
+      On Error GoTo 0
+      
+      Err.Raise ErrNumber, ErrSource, ErrDescription
+    End If
+  Else
+    Dim rs As Recordset, savedBookmark
+    Set rs = aRecordSet(1)
+    
+    If rs.EOF Then
+      RecordCountRecordsetForReport = Empty
+    Else
+      savedBookmark = rs.Bookmark
+      rs.MoveLast
+      RecordCountRecordsetForReport = rs.RecordCount
+      rs.Bookmark = savedBookmark
+    End If
+  End If
+End Function
+
 Public Function OpenRecordsetForReport(ByVal name As String, ByVal query As String, ByRef ParamList, ByRef aRecordSet As Variant) As Boolean
       
   Dim sSQL As String, iTmp As Long, sErrorMsg
@@ -2581,9 +2613,9 @@ Public Function Code128(ByRef pParamList As Object, aArg As Variant) As String
   
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription: ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
 End Function
 
 Function code128_zebra(SourceString, return_type)
@@ -2750,9 +2782,9 @@ Public Function EAN13(pParamList, aArg As Variant) As String
   End If
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription: ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
 End Function
 
 Public Function EAN13CheckNumber(ByVal Code)
@@ -2860,10 +2892,10 @@ Public Sub NumberIteration_New(ByRef Container, ByVal sParam, ByRef pDic)
   
   Exit Sub
 OnError:
-  Dim errNumber, errSource, errDescription
-  errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription
+  ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
   
 End Sub
 
@@ -2881,10 +2913,10 @@ Public Function NumberIteration_EOF(ByRef Container, ByRef pDic)
   
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription
-  errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription
+  ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
   
 End Function
 
@@ -2905,10 +2937,10 @@ Public Function NumberIteration_Fetch(ByRef Container, ByRef pDic)
   
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription
-  errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription
+  ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
   
 End Function
 
@@ -2922,10 +2954,10 @@ Public Sub NumberIteration_Close(ByRef Container, ByRef pDic)
   
   Exit Sub
 OnError:
-  Dim errNumber, errSource, errDescription
-  errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription
+  ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
   
 End Sub
 
@@ -2940,10 +2972,10 @@ Public Sub While_New(ByRef Container, ByVal sParam, ByRef pDic)
   Container("exp") = sParam
   Exit Sub
 OnError:
-  Dim errNumber, errSource, errDescription
-  errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription
+  ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
   
 End Sub
 
@@ -2955,10 +2987,10 @@ Public Function While_EOF(ByRef Container, ByRef pDic)
   While_EOF = Not GetExpression(Container("exp"), pDic, 1)
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription
-  errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription
+  ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
   
 End Function
 
@@ -2970,10 +3002,10 @@ Public Function While_Fetch(ByRef Container, ByRef pDic)
   
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription
-  errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription
+  ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
   
 End Function
 
@@ -2985,10 +3017,10 @@ Public Sub While_Close(ByRef Container, ByRef pDic)
   
   Exit Sub
 OnError:
-  Dim errNumber, errSource, errDescription
-  errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription
+  ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
   
 End Sub
 

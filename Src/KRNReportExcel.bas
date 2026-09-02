@@ -32,7 +32,7 @@ Private Const MD_FORMULA_SOURCE = 3
 Private Const MDT_RECORD = 0
 Private Const MDT_VALUE = 1
 
-Private Const nBlockSize = 128
+Private Const nBlockSize = 1024
  
 
 Public Function ParseTemplateFormula(ByVal sValue)
@@ -299,7 +299,7 @@ Private Sub ExcelReportFormatCell(pCell, pFormatterList, ParamList)
 End Sub
 
 Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal nRowStart = -1, Optional ByVal nRowEnd = -1)
-  Dim i, j, aRecordSet, sErrorMsg, CellRange, row1, row2, col1, col2, RecordResult, RecordValues, RecordValuesEtalon, RecordFormats
+  Dim i, j, aRecordSet, sErrorMsg, CellRange, row1, row2, col1, col2, RecordResult, RecordValues, RecordValuesEtalon, RecordFormats, nBlockSizeLocal
   Dim CurrentOffsetRow, ElementsInDataset, bShift, RecordHeight
   
   If nRowStart = -1 Then nRowStart = LBound(aModel)
@@ -349,7 +349,20 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
             Dim CellFormulaIdx, CellRelRow, CellRelCol
             Dim flushRng, tailRowsToDelete, unscaledData
             
-            nBlockRows = nBlockSize * RecordHeight
+            
+            nBlockSizeLocal = KRNReport.RecordCountRecordsetForReport(ParamList, aRecordSet)
+            If IsEmpty(nBlockSizeLocal) Then
+              nBlockSizeLocal = nBlockSize
+            Else
+              nBlockSizeLocal = nBlockSizeLocal \ 4
+              If nBlockSizeLocal = 0 Then
+                nBlockSizeLocal = 1
+              ElseIf nBlockSizeLocal > nBlockSize Then
+                nBlockSizeLocal = nBlockSize
+              End If
+            End If
+            
+            nBlockRows = nBlockSizeLocal * RecordHeight
             nAllocatedRecords = 0
             nCurrentRecordInBlock = 0
             nTotalProcessedRecords = 0
@@ -375,10 +388,10 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
                 End If
                 Set CurrentRow = Nothing
                 
-                ' Формируем эталонный массив на весь блок nBlockSize записей
+                ' Формируем эталонный массив на весь блок nBlockSizeLocal записей
                 ReDim RecordValuesEtalon(1 To nBlockRows, 1 To aModel(i)(MD_RECORD_WIDTH))
                 Dim b_k, b_r, b_c
-                For b_k = 0 To nBlockSize - 1
+                For b_k = 0 To nBlockSizeLocal - 1
                   For b_r = 1 To RecordHeight
                     For b_c = 1 To aModel(i)(MD_RECORD_WIDTH)
                       RecordValuesEtalon(b_k * RecordHeight + b_r, b_c) = singleEtalon(b_r, b_c)
@@ -386,38 +399,34 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
                   Next
                 Next
                 
-                ' Раздвигаем Excel сразу на nBlockSize * 2 записей:
-                ' Исходный шаблон (1 копия) + вставка (nBlockSize * 2 - 1) копий
-                If (nBlockSize * 2 - 1) > 0 Then
-                  
-                  ' Раздвигаем Excel сразу до nBlockSize * 2 логических записей (с учетом исходного шаблона)
-                  Dim nTargetRecords, nCurrentCopies, nToCopy
-                  nTargetRecords = nBlockSize * 2
-                  nCurrentCopies = 1
-                  
-                  ' Экспоненциальное размножение шаблона со сдвигом вниз
-                  Do While nCurrentCopies < nTargetRecords
-                    nToCopy = nCurrentCopies
-                    If nCurrentCopies + nToCopy > nTargetRecords Then
-                      nToCopy = nTargetRecords - nCurrentCopies
-                    End If
-                    
-                    ' Копируем уже накопленный блок строк
-                    Set CellRange = objSheet.Rows(row1 & ":" & (row1 + nToCopy * RecordHeight - 1))
-                    CellRange.Copy
-                    ' Вставляем перед строкой, следующей за уже накопленными копиями
-                    objSheet.Rows(row1 + nCurrentCopies * RecordHeight).Insert (-4121) ' xlDown
-                    objSheet.Application.CutCopyMode = False
-                    Set CellRange = Nothing
-                    
-                    nCurrentCopies = nCurrentCopies + nToCopy
-                  Loop
-                  
-                  nAllocatedRecords = nBlockSize * 2
-
-                End If
+                ' Раздвигаем Excel сразу до nBlockSize * 2 логических записей (с учетом исходного шаблона)
+                ' Вставка происходит ПЕРЕД текущей позицией row1, чтобы формулы снизу расширялись
+                Dim nTargetRecords, nCurrentCopies, nToCopy, nInsertedHeight
                 
-                nAllocatedRecords = nBlockSize * 2
+                nTargetRecords = nBlockSizeLocal * 2
+                nCurrentCopies = 1
+                
+                Do While nCurrentCopies < nTargetRecords
+                  nToCopy = nCurrentCopies
+                  If nCurrentCopies + nToCopy > nTargetRecords Then
+                    nToCopy = nTargetRecords - nCurrentCopies
+                  End If
+                  
+                  ' Копируем уже накопленный блок строк
+                  Set CellRange = objSheet.Rows(row1 & ":" & (row1 + nToCopy * RecordHeight - 1))
+                  CellRange.Copy
+                  
+                  ' Вставляем ПЕРЕД текущей строкой row1, сдвигая всё (включая формулы) вниз
+                  objSheet.Rows(row1).Insert (-4121) ' xlDown
+                  objSheet.Application.CutCopyMode = False
+                  Set CellRange = Nothing
+                  
+                  ' Смещаем указатель начала блока вверх на высоту вставки
+                  'row1 = row1 + nToCopy * RecordHeight
+                  nCurrentCopies = nCurrentCopies + nToCopy
+                Loop
+                
+                nAllocatedRecords = nBlockSizeLocal * 2
                 RecordValues = RecordValuesEtalon
                 bInitialized = True
               End If
@@ -442,8 +451,8 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
               nCurrentRecordInBlock = nCurrentRecordInBlock + 1
               nTotalProcessedRecords = nTotalProcessedRecords + 1
               
-              ' --- 3. Сброс полного блока при достижении nBlockSize ---
-              If nCurrentRecordInBlock = nBlockSize Then
+              ' Сброс полного блока при достижении nBlockSizeLocal
+              If nCurrentRecordInBlock = nBlockSizeLocal Then
                 rBlock2 = rBlock1 + nBlockRows - 1
                 Set flushRng = objSheet.Range(ExcelColToLetter(col1) & rBlock1 & ":" & ExcelColToLetter(col2) & rBlock2)
                 flushRng.FormulaR1C1 = RecordValues
@@ -455,20 +464,24 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
                 Next
                 RecordFormats = Array()
                 
-                ' Пополнение буфера строк: копируем блок строк вниз, чтобы резерв оставался >= nBlockSize
+                ' Смещение указателя начала следующего блока вверх
+                rBlock1 = rBlock1 + nBlockRows
+                rBlock2 = rBlock1 + nBlockRows - 1
+                
+                ' Пополнение буфера: вставляем новый блок ПЕРЕД текущим rBlock1
                 Set CellRange = objSheet.Rows(rBlock1 & ":" & rBlock2)
                 CellRange.Copy
-                objSheet.Rows((rBlock2 + 1) & ":" & (rBlock2 + nBlockRows)).Insert (-4121) ' xlDown
+                objSheet.Rows(rBlock1).Insert (-4121) ' xlDown
                 objSheet.Application.CutCopyMode = False
                 Set CellRange = Nothing
-                nAllocatedRecords = nAllocatedRecords + nBlockSize
                 
-                ' Смещение указателей на следующий блок
-                rBlock1 = rBlock1 + nBlockRows
+                nAllocatedRecords = nAllocatedRecords + nBlockSizeLocal
+                
                 nCurrentRecordInBlock = 0
                 RecordValues = RecordValuesEtalon
               End If
             Loop
+            
             
             ' --- 4. Финализация: сброс остатка и очистка хвоста ---
             If bInitialized Then
@@ -494,14 +507,30 @@ Public Function ExcelReportFillSheet(objSheet, aModel, ParamList, Optional ByVal
                 Next
                 RecordFormats = Array()
                 
-                rBlock1 = rBlock1 + nTailRows
+                ' rBlock1 теперь указывает на начало последнего блока, а rBlock2 - на его конец
+                ' Следующий блок (резерв) начинается с rBlock2 + 1
               End If
               
-              ' Удаление лишнего зарезервированного хвоста строк
+              ' Удаление лишнего зарезервированного хвоста строк (после фактических данных)
               tailRowsToDelete = (nAllocatedRecords - nTotalProcessedRecords) * RecordHeight
               If tailRowsToDelete > 0 Then
-                objSheet.Rows(rBlock1 & ":" & (rBlock1 + tailRowsToDelete - 1)).Delete (-4162) ' xlUp
+                ' Фактический конец данных: rBlock2 (если был остаток) или rBlock1 - RecordHeight (если остатка не было)
+                Dim actualEndRow As Long
+                If nCurrentRecordInBlock > 0 Then
+                  actualEndRow = rBlock1 + (nCurrentRecordInBlock * RecordHeight) - 1
+                Else
+                  ' Если остатка не было, последний блок был полным и его конец = rBlock1 - RecordHeight
+                  actualEndRow = rBlock1 - RecordHeight
+                End If
+                
+                ' Удаляем строки начиная с actualEndRow + 1
+                objSheet.Rows(actualEndRow + 1 & ":" & (actualEndRow + tailRowsToDelete)).Delete (-4162) ' xlUp
               End If
+              
+              ' Сброс UsedRange
+              Dim ur
+              Set ur = objSheet.UsedRange
+              Set ur = Nothing
               
               CurrentOffsetRow = nTotalProcessedRecords * RecordHeight
               
@@ -704,9 +733,9 @@ Public Function Excel_Code128(ByRef pParamList As Object, aArg As Variant) As St
   
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription: ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
 End Function
 
 
@@ -724,9 +753,9 @@ Public Function Excel_EAN13(ByRef pParamList As Object, aArg As Variant) As Stri
   
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription: ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
 End Function
 
 Public Function Excel_Img_PostProcess(ByRef pRange, ByRef pParamList, aArg As Variant)
@@ -760,9 +789,9 @@ Public Function Excel_Img_PostProcess(ByRef pRange, ByRef pParamList, aArg As Va
 
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription: ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
 End Function
 
 Public Function Excel_Img(ByRef pParamList As Object, aArg As Variant) As String

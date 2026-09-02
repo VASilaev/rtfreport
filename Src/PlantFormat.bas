@@ -188,9 +188,9 @@ Function fncPlantFormat(ByRef pParamList As Object, aArg As Variant) As String
   
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription: ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
 
 End Function
 
@@ -264,9 +264,9 @@ Function fncEvalTextWrapper(ByRef pParamList As Object, aArg As Variant) As Stri
   
   Exit Function
 OnError:
-  Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription: ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
 
 End Function
 
@@ -366,8 +366,8 @@ Public Sub fncExcel_FontFormatter(pRange, ParamList, pUserData)
         
   Exit Sub
 OnError:
-  Dim errNumber, errSource, errDescription: errNumber = Err.Number: errSource = Err.Source: errDescription = Err.Description
+  Dim ErrNumber, ErrSource, ErrDescription: ErrNumber = Err.Number: ErrSource = Err.Source: ErrDescription = Err.Description
   On Error GoTo 0
-  Err.Number = errNumber: Err.Source = errSource: Err.Description = errDescription
+  Err.Number = ErrNumber: Err.Source = ErrSource: Err.Description = ErrDescription
 
 End Sub
